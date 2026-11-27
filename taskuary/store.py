@@ -631,7 +631,7 @@ CREATE TABLE IF NOT EXISTS agentchannel (ChannelId INTEGER PRIMARY KEY, Kind TEX
   Repo TEXT, MembersJson TEXT, StateJson TEXT, CreatedAt TEXT, UNIQUE(Kind, Chat));
 CREATE TABLE IF NOT EXISTS agentchannel_msg (Id INTEGER PRIMARY KEY, ChannelId INTEGER, ExtId TEXT, Dir TEXT, Who TEXT, Role TEXT,
   TaskId INTEGER, Text TEXT, At TEXT, UNIQUE(ChannelId, ExtId));
--- ...and the owner's "always" answers to an agent's permission requests (permissions.py), per task and tool pattern
+-- ...and the folders the owner let a task read (readgate.grant), per task
 CREATE TABLE IF NOT EXISTS permrule (RuleId INTEGER PRIMARY KEY, TaskId INTEGER, Pattern TEXT, Answer TEXT, CreatedAt TEXT,
   UNIQUE(TaskId, Pattern));
 CREATE TABLE IF NOT EXISTS learned_history (Id INTEGER PRIMARY KEY, Key TEXT, Text TEXT, Status TEXT, Score INTEGER,
@@ -6171,7 +6171,7 @@ class SQLiteStore:
         return len(ids)
     def tasks_with_peer_notes(self) -> list:
         return [r['ToTask'] for r in self._rows('SELECT DISTINCT ToTask FROM peernote WHERE ReadAt IS NULL')]
-    # ── agent channels (agentchannels.py) and the owner's standing permission answers (permissions.py) ──
+    # ── agent channels (agentchannels.py) and the folders a task may read (readgate.grant) ──
     def agent_channels(self) -> list: return self._rows('SELECT * FROM agentchannel ORDER BY ChannelId')
     def agent_channel(self, cid: int): return self._one('SELECT * FROM agentchannel WHERE ChannelId=?', (int(cid),))
     def add_agent_channel(self, f: dict) -> int:
@@ -6190,9 +6190,6 @@ class SQLiteStore:
             return cur.rowcount > 0
     def agent_channel_msgs(self, cid: int, n: int = 50) -> list:
         return self._rows('SELECT * FROM agentchannel_msg WHERE ChannelId=? ORDER BY Id DESC LIMIT ?', (int(cid), int(n)))[::-1]
-    def perm_rule(self, tid: int, pattern: str):
-        r = self._one('SELECT Answer FROM permrule WHERE TaskId=? AND Pattern=?', (int(tid), str(pattern)))
-        return r['Answer'] if r else None
     def set_perm_rule(self, tid: int, pattern: str, answer: str):
         self._exec('INSERT OR REPLACE INTO permrule (TaskId, Pattern, Answer, CreatedAt) VALUES (?,?,?,?)', (int(tid), str(pattern), answer, _now()))
     def perm_rules(self, tid: int) -> list: return self._rows('SELECT * FROM permrule WHERE TaskId=? ORDER BY RuleId', (int(tid),))

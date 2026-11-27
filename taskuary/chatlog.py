@@ -622,26 +622,6 @@ def at_work(store, tid: int, sid: str = '') -> None:
     if (t := open_turn(store, tid)) and t['State'] == 'starting': update(store, tid, t['Key'], state='working', **({'sid': sid} if sid else {}))
 
 
-def asked_on_row(store, tid: int) -> set:
-    "The calls whose rows carry his answer to the permission asked on them (asked_answered): that row is the answer's one record."
-    with store.lock: return {r[0] for r in store.cx.execute("SELECT json_extract(Body, '$.call') FROM chatlog WHERE TaskId=? AND Kind='step' "
-                                                           "AND json_extract(Body, '$.answer') IS NOT NULL", (int(tid),))}
-@_safe
-def asked_answered(store, tid: int, call: str, answer: str) -> None:
-    """His answer to a permission asked on its call's row (permissions.ask) - written on that row, the one record of it: no press line besides.
-    The row is the call's however it was written: its key names it (s:<sid>:<call>, feed), or its body does (`call`, or the `id` a frozen or
-    older row kept). And HIS ANSWER CUTS THE TURN THERE, as his press line did (the owner's live app, 2026-11-18: the work after his Allow read
-    "working 15m" from the turn's start): what the agent does after it goes on in a new part, started at his press (_goes_on_)."""
-    if not call: return
-    c = str(call)
-    with store.lock:
-        r = store.cx.execute("SELECT * FROM chatlog WHERE TaskId=? AND Kind='step' AND (Key LIKE 's:%' AND substr(Key, -?)=? OR ? IN "
-                             "(json_extract(Body, '$.call'), json_extract(Body, '$.id'))) ORDER BY Id DESC LIMIT 1", (int(tid), len(c) + 1, f':{c}', c)).fetchone()
-        if not r: return
-        _update(store, tid, dict(r), None, {'call': c, 'answer': str(answer)}); _goes_on_(store, tid, r['Id']); store.cx.commit()
-    _poke(store, tid)
-
-
 ENDS = ('stopped_turn', 'close_from_assistant')      # ...his stop and his close end the turn they were pressed under, and never wait
 AT_ONCE = {'browser_act_pressed'}         # presses drawn where he made them even under a turn at work
 @_safe
@@ -1409,7 +1389,7 @@ def serve(store, tid: int, level: str = None) -> dict:
 
 def _serve(store, tid: int, level: str = None) -> dict:
     """What the page draws for task `tid`: the log's items, in its one order, each turn at its level, and beside them what waits by the box,
-    what the agent asks, the permissions it waits on, the line of cards and the hold. A task is frozen into the log at its first read
+    what the agent asks, the line of cards and the hold. A task is frozen into the log at its first read
     (migrate); what waits is never also drawn (an input is in one place)."""
     from . import general, origin, workflows
     tid = int(tid)
@@ -1541,10 +1521,10 @@ def turn_words(t: dict) -> str:
 def beside(store, tid: int, out: list, at_work: bool, hold_, ending: bool = False) -> dict:
     """What the page draws beside the chat's items, each from the fact that says it: what waits for the agent (`pending` - his lines not yet
     heard; a message, a press while a turn works; what an untrusted sender wrote), `now`/`later` (whether a waiting line goes in mid-turn),
-    `asking` (in the turn that asked), `permissions`, `queue` (the line of cards), `hold`, `letters` (the turn whose letter waits), `idle`
+    `asking` (in the turn that asked), `queue` (the line of cards), `hold`, `letters` (the turn whose letter waits), `idle`
     (why nothing started), the pages it published, and the CLI that runs. `ending`: a turn whose answer is filed while its session lets go -
     what came in under it still waits by the box (came_in writes it at the foot once nothing works)."""
-    from . import cardqueue, codingchat, general, origin, outputs, permissions, taskstate
+    from . import cardqueue, codingchat, general, origin, outputs, taskstate
     from .conversation import LATER, START_BY_WRITING, came, ep, stamp, _mail
     from .general import WAITING_TYPE
     task = store.get_task(tid) or {'TaskId': tid}
@@ -1574,10 +1554,8 @@ def beside(store, tid: int, out: list, at_work: bool, hold_, ending: bool = Fals
             pend.append({'id': f'p:{aid}', 'kind': 'press', 'at': m['createdAt'], 'text': m['content'][0]['text'],
                          '_k': (int(ep(m['createdAt'])), float('inf'), 2, int(aid))})
     pend.sort(key=lambda p: p.pop('_k'))
-    perms = permissions.pending(tid, store)
     live = general._live_of(tid)
     ask = taskstate.asking(store, task, general.session_for(tid) or (live if codingchat._live(tid) else None))
-    if ask and ask.get('source') == 'permission' and perms: ask = None
     flat = lambda v: ' '.join(re.sub(r'[*_`]', '', str(v or '')).split())
     turns = [x for x in out if x['kind'] == 'turn']
     last = turns[-1] if turns else None
@@ -1608,7 +1586,7 @@ def beside(store, tid: int, out: list, at_work: bool, hold_, ending: bool = Fals
                     and any(c.get('status') == 'pending' and c.get('what') in (*DRAFTS, 'slot') for c in x.get('cards') or [])), None)
     left_on_him(store, tid, out, ask, letters)
     lv = codingchat._live(tid)
-    now = bool(at_work and pend and not perms and lv is not None and getattr(lv, 'steerable', lambda: False)())
+    now = bool(at_work and pend and lv is not None and getattr(lv, 'steerable', lambda: False)())
     later = LATER if at_work and any(p['kind'] == 'line' for p in pend) and not getattr(live, 'hears_mid_turn', lambda: True)() else ''
     dropped = [json.loads(r['Detail'] or '{}').get('line') for r in store._rows(
         "SELECT Detail FROM audit WHERE EntityType='task' AND EntityId=? AND Action='line_dropped'", (tid,))]
@@ -1632,7 +1610,7 @@ def beside(store, tid: int, out: list, at_work: bool, hold_, ending: bool = Fals
     # at its opening, its page never drew (the design loop, 2026-11-20)
     sid = getattr(lv, 'sid', '') or getattr(live, 'sid', '') or ''
     return {'pending': pend, 'needsOwner': taskstate.needs_owner(ask, taskstate.browser_acts(store, tid), sid), 'now': now, 'later': later, 'dropped': [d for d in dropped if d], 'working': at_work,
-            'started': general.turn_started(tid) if at_work else None, 'asking': ask, 'permissions': perms, 'live': codingchat.live_of(lv),
+            'started': general.turn_started(tid) if at_work else None, 'asking': ask, 'live': codingchat.live_of(lv),
             # ...what stands lit beside its front (cardqueue.alone), and each card that is a set under tabs (cardqueue.sets) - none on a task a
             # stranger's words hold: no card waits there
             'letters': letters, 'idle': idle, 'queue': {'live': q['live'], 'held': q['held'], 'line': cardqueue.line(q),

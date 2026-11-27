@@ -6505,20 +6505,6 @@ def agent_channel_unbind(cid: int, request: Request):
     try: return agentchannels.unbind(store, cid, ACTOR)
     except LookupError as e: raise HTTPException(404, str(e))
 
-class PermissionBody(BaseModel):
-    id: str
-    option: str
-
-@app.post('/api/tasks/{tid}/permission')
-def task_permission(tid: int, body: PermissionBody, request: Request):
-    "The owner's button on an agent's permission request (permissions.py) - the task chat's card."
-    from . import permissions
-    _owner_only(request, "answering an agent's permission request is the owner's")
-    try: out = permissions.answer(store, tid, body.id, body.option, ACTOR)
-    except ValueError as e: raise HTTPException(422, str(e))
-    if not out.get('ok'): raise HTTPException(409, out.get('why') or 'that request is no longer waiting')
-    return out
-
 class RevertBody(BaseModel): parts: list[dict]
 
 @app.post('/api/tasks/{tid}/landing/revert')

@@ -8,7 +8,7 @@ from unittest import mock
 
 import pytest
 
-from taskuary import acp, gate, agents, clipool, clis, permissions, shellgate
+from taskuary import acp, gate, agents, clipool, clis, shellgate
 from taskuary.store import MemoryStore
 from taskuary.testing import turn_told
 
@@ -40,8 +40,7 @@ def test_a_plain_call_is_allowed_once_never_always():
 def test_a_push_is_held_for_the_owner_and_the_step_reads_held_not_failed():
     s = MemoryStore()
     tid = s.create_task({'Title': 'Fix the budget total', 'Kind': 'general', 'Status': 'open'}, 'owner')
-    # nobody answers the owner's buttons (permissions.ask) in time: the Approve card is filed and the call refused, as before
-    with mock.patch.object(shellgate, 'trusted', return_value=''), mock.patch('taskuary.permissions.TIMEOUT', 0.3):
+    with mock.patch.object(shellgate, 'trusted', return_value=''):
         out, ev = run(profile(), env={'FAKE_ACP_ASK': 'git push origin main'}, store=s, task_id=tid)
     assert 'denied' in out[0]
     perm = next(d for k, _n, d in ev if k == 'permission')
@@ -84,78 +83,28 @@ def test_a_general_runs_own_updates_are_its_chat_rows_and_its_trace_draws_none_a
     assert [b['text'].strip() for _k, b in rows if b.get('k') == 'said'][0] == 'Looking.'
 
 
-def _answering(option):
-    "The owner pressing a button on the held call as soon as it is up (the task chat's card, permissions.answer)."
-    def go():
-        for _ in range(200):
-            p = permissions.pending(store=STORE[0])
-            if p: return permissions.answer(STORE[0], p[0]['tid'], p[0]['id'], option)
-            threading.Event().wait(0.05)
-    t = threading.Thread(target=go, daemon=True); t.start(); return t
-STORE = [None]
-
-
-def test_a_chat_agents_held_step_is_its_approve_card_at_once_never_buttons_no_page_draws():
-    """Recorded on the real CLI, 2026-11-12: with Developer mode on, a chat agent's delete was put to the owner as Allow once / Reject -
-    buttons only a coding task's chat draws. Its turn read "working" for ten minutes with nothing to press; only then the Approve card
-    came. A chat agent's held step is that card from the start, whatever Developer mode says."""
+@pytest.mark.parametrize('kind', ['general', 'coding'])
+def test_a_held_step_is_the_tasks_one_action_card_at_once_on_every_agent_kind(kind):
+    """The owner, 2026-11-27: "ANY approval is ONE ACTION CARD". A coding agent's held push was a second kind of box - Allow once / Allow
+    always / Reject, and "No answer by HH:MM refuses it" - while a chat agent's was the action card. With Developer mode on, a coding task's
+    held step is the same card at once: it stands until he presses it, and nothing times out into a no he never saw."""
     s = MemoryStore()
-    tid = s.create_task({'Title': 'Tidy the exports folder', 'Kind': 'general', 'Status': 'open'}, 'owner')
-    with mock.patch.object(shellgate, 'trusted', return_value=''), mock.patch.object(permissions, 'ask', side_effect=AssertionError('buttons were asked')):
+    tid = s.create_task({'Title': 'Tidy the exports folder', 'Kind': kind, 'Status': 'open'}, 'owner')
+    with mock.patch.object(shellgate, 'trusted', return_value=''), mock.patch.object(agents, 'developer_mode', return_value=True):
         out, ev = run(profile(), env={'FAKE_ACP_ASK': 'git push origin main'}, store=s, task_id=tid)
-    assert next(d for k, _n, d in ev if k == 'permission')['answer'] == gate.HELD and not permissions.pending(tid, s)
+    assert next(d for k, _n, d in ev if k == 'permission')['answer'] == gate.HELD
     [rv] = s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action'", (tid,))
-    assert rv['Status'] == 'pending' and 'git push origin main' in rv['DraftText']
-
-
-@pytest.mark.parametrize('option,granted', [('allow_once', True), ('reject_once', False)])
-def test_a_held_push_is_the_owners_buttons_and_their_answer_is_the_answer(option, granted):
-    s = STORE[0] = MemoryStore()
-    tid = s.create_task({'Title': 'Fix the budget total', 'Kind': 'coding', 'Status': 'open'}, 'owner')
-    with mock.patch.object(shellgate, 'trusted', return_value=''):
-        t = _answering(option)
-        out, ev = run(profile(), env={'FAKE_ACP_ASK': 'git push origin main'}, store=s, task_id=tid)
-        t.join(5)
-    perm = next(d for k, _n, d in ev if k == 'permission')
-    assert perm['answer'] == (gate.ALLOWED if granted else gate.REFUSED)
-    assert out[0].startswith('granted') == granted
-    # ...and their no is theirs on the step, never "Taskuary refused it: the owner said no" (the owner, 2026-11-10)
-    if not granted: assert perm['why'] == gate.YOU_REJECTED == 'You rejected this'
-    # answered on the spot: no Approve card waits as well
-    assert not s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action'", (tid,))
-    assert not permissions.pending(tid, s)
+    assert rv['Status'] == 'pending' and json.loads(rv['DraftText'])['action'] == 'shell_act' and 'git push origin main' in rv['DraftText']
+    assert not hasattr(gate, 'owner_asks') and not hasattr(gate, 'put_to_owner')
 
 
 def test_the_step_says_whose_no_it_was():
     opts = [{'optionId': 'y', 'kind': 'allow_once'}, {'optionId': 'n', 'kind': 'reject_once'}]
-    for said, reads in ((gate.YOU_REJECTED, 'You rejected this'), ('it writes off this machine', 'Taskuary refused it: it writes off this machine')):
+    for said, reads in (('it writes off this machine', 'Taskuary refused it: it writes off this machine'),):
         held = {}
         with mock.patch.object(gate, 'tool_call', return_value=(gate.REFUSED, said)):
             gate.answerer({}, held=held)({'toolCall': {'toolCallId': 'c1', 'kind': 'execute'}, 'options': opts})
         assert held == {'c1': reads}
-
-
-def test_the_owners_reject_reaches_the_agent_as_the_owners_no_and_their_allow_says_nothing():
-    """Agent walk 2, 2026-11-10: Reject reached the agent as the adapter's "User refused permission to run tool" - the same sentence it
-    gets when Taskuary blocks a step by itself - and it ended its turn asking for the same push again."""
-    from taskuary import browsergate
-    for option, heard in (('reject_once', True), ('allow_once', False)):
-        s = STORE[0] = MemoryStore()
-        tid = s.create_task({'Title': 'Fix the budget total', 'Kind': 'coding', 'Status': 'open'}, 'owner')
-        told = []
-        sess = SimpleNamespace(sid='run1', send_prompt=lambda text, as_owner=True: told.append((turn_told(s, tid, text), as_owner)))
-        with mock.patch.object(shellgate, 'trusted', return_value=''), mock.patch('taskuary.workerstate._live', return_value=sess), \
-             mock.patch('taskuary.terminal.stranger_now', return_value=False):
-            t = _answering(option)
-            run(profile(), env={'FAKE_ACP_ASK': 'git push origin main'}, store=s, task_id=tid)
-            t.join(5)
-            for _ in range(100):
-                if told or not heard: break
-                threading.Event().wait(0.05)
-        if not heard: assert told == []; continue
-        [(text, as_owner)] = told
-        assert not as_owner and browsergate.OWNER_NO in text and 'git push origin main' in text and "not a block of Taskuary's" in text
-        assert 'the same step is refused until he writes again' in text
 
 
 def test_a_step_taskuary_refuses_is_told_to_the_agent_with_the_way_on():
@@ -176,15 +125,15 @@ def test_a_step_taskuary_refuses_is_told_to_the_agent_with_the_way_on():
 def test_the_automatic_rules_still_answer_first_and_never_reach_the_owner():
     s = MemoryStore()
     tid = s.create_task({'Title': 'Fix the budget total', 'Kind': 'coding', 'Status': 'open'}, 'owner')
-    with mock.patch.object(permissions, 'ask', side_effect=AssertionError('the owner was asked')):
-        out, ev = run(profile(), store=s, task_id=tid)
+    out, ev = run(profile(), store=s, task_id=tid)
     assert next(d for k, _n, d in ev if k == 'permission')['answer'] == gate.ALLOWED
-    # ...an outside HTTP write is no automatic refusal (the north-star audit, 2026-11-10): it is the owner's to answer, as a push is
+    assert not s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action'", (tid,))
+    # ...an outside HTTP write is no automatic refusal (the north-star audit, 2026-11-10): it is the owner's card, as a push is
     cmd = 'curl -X POST https://hooks.vendor.example/notify -d "{}"'
-    with mock.patch.object(permissions, 'ask', return_value='reject_once') as asked:
-        assert gate.answerer({'store': s, 'task_id': tid, 'cwd': HERE})({'toolCall': {'toolCallId': 'c', 'kind': 'execute', 'rawInput': {'command': cmd}},
+    with mock.patch.object(shellgate, 'trusted', return_value=''):
+        assert gate.answerer({'store': s, 'task_id': tid, 'cwd': HERE, 'sid': 'run1'})({'toolCall': {'toolCallId': 'c', 'kind': 'execute', 'rawInput': {'command': cmd}},
             'options': [{'optionId': 'y', 'kind': 'allow_once'}, {'optionId': 'n', 'kind': 'reject_once'}]}) == {'outcome': 'selected', 'optionId': 'n'}
-    asked.assert_called_once()
+    assert len(s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (tid,))) == 1
 
 
 @pytest.mark.parametrize('cmd', ['curl -X POST https://hooks.vendor.example/notify -d "{}"',

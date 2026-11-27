@@ -47,9 +47,6 @@ PURPOSE = {
                                  'picks the time, or says there is none to pick from, or "none" to bring it back now; `ref` names the task (TQ-0123) when it is not '
                                  'the one on the table. "Remind me about <a task that exists>" - named by ref, sender or '
                                  'subject - is this'),
-    'review.approve':           ("the owner's yes to what is drafted: sends the reply as it stands - and on a task's finish card merges the pull "
-                                 "request (or closes the issue) FIRST, sending the reply only if that worked. The task stays open: "
-                                 "task.complete (Mark done) is the close"),
     'agent.answer':             ('answer the agent that is waiting - `text`; `ref` names its task when it is not the one on the table. With no '
                                  'agent on the task (TASK NOW says so) nobody hears it; agent.continue or dispatch.prepare starts '
                                  'one. An agent still WORKING, not asking, takes words as agent.tell'),
@@ -140,10 +137,6 @@ PURPOSE = {
                                  'a coding task asks which repository when it is not clear; `ref`'),
     'agent.continue':           "pick up the agent's own last session on a task where it left off, coding or not - `ref`, "
                                 "and `note` when the owner said what to tell it as it picks up",
-    # ...never the road for a reply draft (the owner, 2026-10-01: "rejected is useless - it should be redraft or close task"): "scrap the
-    # draft" picked this from its old words and the desk refused it, Redraft and Mark done on the row (the task-page audit, 2026-11-02)
-    'review.reject':            (f'reject the draft waiting on a task - nothing is sent, the task stays open; `ref` names the task. A REPLY draft '
-                                 f'is never rejected: {L("redraft")} (redraft) writes it again, {L("close")} (close) closes the task with nothing sent'),
     'hub.publish':              ('save to the company Hub - `title`: one durable claim, `body`: why it matters and what to do, `topic`, '
                                  '`kind`: new_idea | technical_solve | howto | gotcha | decision | system | people, `why_earned`. The Hub '
                                  'holds reusable discoveries reached through real work and developed ideas with their reasons. At the desk '
@@ -505,7 +498,7 @@ BUCKETS = (
     ('table', 'decide about the item on the table', tuple(DECISIONS)),
     ('task', "change any task - the table's or one by ref",
      ('task.update', 'task.set_kind', 'task.set_repo', 'task.check', 'task.checklist', 'task.watch', 'task.comment', 'task.split', 'task.merge', 'task.reopen',
-      'task.not_a_task', 'task.complete', 'task.defer', 'task.handoff', 'task.clarify', 'task.share', 'review.approve', 'review.reject')),
+      'task.not_a_task', 'task.complete', 'task.defer', 'task.handoff', 'task.clarify', 'task.share')),
     ('agents', "a task's agent; where work belongs",
      ('dispatch.prepare', 'agent.continue', 'agent.answer', 'agent.tell', 'agent.stop', 'agents.stop', 'routing.remember', 'task.ask_agent')),
     ('new', 'new work with no task yet', ('task.create_from_text', 'task.create_from_message', 'meeting.new', 'task.setup')),

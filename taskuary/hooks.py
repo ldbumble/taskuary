@@ -414,13 +414,13 @@ def _events(t, p: dict) -> None:
             from . import sessionrecord
             his = not is_wake(p.get('prompt')) and any(x.get('k') == 'you' for x in sessionrecord.mark_briefs(tid, [{'k': 'you', 'text': str(p.get('prompt') or '')}]))
             if his and not getattr(t, 'acp', False):
-                try:                                         # ...past every card raised before it (proposals.move_on, 2026-11-10)
+                try:
                     from . import proposals
                     # ...said to it as Taskuary's next line: the prompt that passed them is already in (general.to_agent, the one road)
                     # ...and every card he wrote past, set aside as his line goes in (proposals.set_aside_drafts - the terminal's line is heard here)
                     # ...each card's new state is its event (events.card): the waiting room hands them over as its next line
                     now_ = time.time()
-                    if proposals.move_on(st, tid) + proposals.set_aside_drafts(st, tid, now_):
+                    if proposals.set_aside_drafts(st, tid, now_):
                         from . import general
                         general.to_agent(st, tid, '')
                 except Exception as e: logger.debug(f'task {tid}: a held step stayed pending - {e}')

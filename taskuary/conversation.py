@@ -350,18 +350,6 @@ def take_back(store, tid: int, said: str = None, why: str = '', since: float = 0
     store._poke('task-changed', task_id=int(tid))
 
 
-def hear_press(store, tid: int, action: str) -> None:
-    """A PRESS ITS AGENT HEARS THE MOMENT IT IS MADE - his answer to a call the turn is stopped at (permissions.ask): heard there, so it
-    stands where he pressed with the turn going on under it. Left for the next hand-over, it waited by the box while the turn it had just
-    let go worked on, and then entered above work already drawn (the recorded hold, 2026-11-11)."""
-    r = store._one("SELECT MAX(Id) AS i FROM audit WHERE EntityType='task' AND EntityId=? AND Action=?", (int(tid), action))
-    if not (r and r['i']): return
-    store._exec('INSERT OR IGNORE INTO heard (TaskId,Kind,Ref,At,Grp,Seq,Sid) VALUES (?,?,?,?,?,?,?)', (int(tid), 'press', str(r['i']), now := time.time(), 0, 0, ''))
-    from . import chatlog                    # ...and it stands in the chat's log where it was heard (the one writer of what a hand-over took)
-    chatlog.heard(store, tid, [('press', str(r['i']))], now)
-    store._poke('task-changed', task_id=int(tid))
-
-
 def handed_since(store, tid: int, at) -> bool:
     "Was anything handed to the agent - a line of his, a turn's start - more than a second after `at`: what a session gone since never answered."
     r = store._one("SELECT MAX(At) AS a FROM heard WHERE TaskId=? AND Kind IN ('line','turn')", (int(tid),))
@@ -560,13 +548,10 @@ def acp_of_trace(e: dict, n: int = 0) -> list:
 # ── the list ─────────────────────────────────────────────────────────────────────────────────────
 def _session_steps(store, tid: int) -> list:
     "Every coding session of the task, oldest first: (sid, live, its steps in the one shape, each with `T`)."
-    from . import codingchat, permissions
-    out, asked = [], permissions.calls(store, tid)
+    from . import codingchat
+    out = []
     for s in codingchat.owned(store, tid, codingchat.sessions(store, tid, local=False)):
         steps, t = acp_steps(s['updates']) if s.get('source') == 'acp' else [dict(x) for x in s.get('steps') or []], ep(s.get('at'))
-        # ...a call put to the owner reads as he left it: waiting on him, or never run - never "Deleted ledger-archive" (permissions.calls)
-        for x in steps:
-            if x.get('k') == 'tool' and x.get('status') != 'completed' and (was := asked.get(str(x.get('id') or ''))): x['status'] = was
         # ...A SESSION'S `at` IS ITS START WHILE IT LIVES AND ITS END ONCE IT CLOSED (the filing of its transcript): read from there, every
         # step of a closed session stood at its close - his lines first, then all its turns (recorded 2026-11-12, a coding task opened
         # again after Send and close). Never later than its own first dated step
@@ -629,7 +614,7 @@ def failed_try(store, tid: int) -> None:
 
 
 def items(store, tid: int) -> dict:
-    """The task's conversation, read from its one log (chatlog.serve): {rev, items, pending, working, started, asking, permissions, ...}.
+    """The task's conversation, read from its one log (chatlog.serve): {rev, items, pending, working, started, asking, ...}.
     The old build that pieced it together on every read is kept only to freeze a task into the log once (conversation_legacy)."""
     from . import chatlog
     return chatlog.serve(store, tid)

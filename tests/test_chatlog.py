@@ -679,7 +679,7 @@ def test_what_waits_by_the_box_is_read_beside_the_log_never_drawn_twice():
     general.wait_line(s, tid, 'Also the March numbers', line_id='l-wait')
     got = chatlog.serve(s, tid)
     assert [p['id'] for p in got['pending']] == ['l-wait'] and 'l-wait' not in [x['id'] for x in got['items']]
-    assert set(got) >= {'rev', 'items', 'pending', 'working', 'asking', 'permissions', 'queue', 'hold', 'letters', 'published', 'ran'}
+    assert set(got) >= {'rev', 'items', 'pending', 'working', 'asking', 'queue', 'hold', 'letters', 'published', 'ran'}
     conversation.hear(s, tid, ['l-wait'])
     got = chatlog.serve(s, tid)
     assert got['pending'] == [] and 'l-wait' in [x['id'] for x in got['items']]
@@ -1036,7 +1036,7 @@ def test_a_permission_asked_is_its_calls_update_with_the_agents_options_and_clea
     """THE ASK BELONGS TO THE CALL'S ROW (the ACP spec: a request_permission's toolCall IS that call's update; Zed draws it in the call's card):
     Codex announces a read with no input and asks for it with the input and its own kind - the ask fills only what the call left out, the row
     carries the agent's options while it waits, and they are gone from it once the call runs."""
-    from taskuary import acp, conversation, permissions
+    from taskuary import acp, conversation
     s, tid = world()
     conversation.hear(s, tid, turn=True)
     put = lambda u: chatlog.feed(s, tid, 'sid1', 'acp', u)
@@ -1050,11 +1050,6 @@ def test_a_permission_asked_is_its_calls_update_with_the_agents_options_and_clea
     assert r['text'] == 'Get-Content notes.md' and [o['name'] for o in r['ask']] == ['Yes', 'No'], r
     put({'sessionUpdate': 'tool_call_update', 'toolCallId': 'call_9', 'status': 'in_progress'})
     assert not row().get('ask'), 'answered and running: nothing waits on the row'
-    # ...and a request put to him names that call, so the page draws its buttons on that row (chatStream.askOn)
-    with permissions._LOCK: permissions.PENDING['t-row'] = {'id': 't-row', 'tid': tid, 'store': s, 'req': permissions.normal({'call': 'call_9', 'tool': 'Bash'}),
-                                                           'g': 'g', 'rid': 'r', 'sid': 'sid1', 'at': '2026-11-23 10:00:00', 'until': '2026-11-23 10:05:00'}
-    try: assert [p['call'] for p in permissions.pending(tid, s)] == ['call_9']
-    finally: permissions.PENDING.pop('t-row', None)
 
 
 def test_a_plan_is_one_row_replaced_whole_and_the_sessions_state_is_no_row():

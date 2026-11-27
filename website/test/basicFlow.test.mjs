@@ -108,9 +108,9 @@ test("a turn at work says what is happening, or what we wait for, beside its dot
   assert.ok(thinkingLine("word ".repeat(80)).length <= 110);
   // ...and the answer it is writing is its own row, streamed into it (the owner, 2026-11-23) - never a second copy on this line
   assert.equal(workingLine([{ type: "said", text: "Option one is Salem. Option two is" }], label, { doing: "Option one is Salem. Option two is" }), "Thinking…");
-  assert.equal(workingLine(parts, label, { ask: "Waiting for your Allow once" }), "Waiting for your Allow once");
+  assert.equal(workingLine(parts, label, { ask: "Waiting for you to sign in" }), "Waiting for you to sign in");
   const { waitingOn } = await import("../src/chatStream.js");
-  assert.equal(waitingOn({ permissions: [{}] }), "Waiting for your Allow once");
+  assert.equal(waitingOn({ permissions: [{}] }), "", "no second kind of approval: a held step is its action card, never a wait on the turn");
   assert.equal(waitingOn({ asking: { ask: "signin", site: "bank.example" } }), "Waiting for you to sign in");
   assert.equal(waitingOn({ asking: { request_id: "q1" } }), "", "a question asked before is no wait while it works");
   assert.equal(waitingOn({}), "");
@@ -160,7 +160,7 @@ test("the working line names what no row in sight says - at every beat of a turn
   // ConvTurn reads the open state of the fold the newest work is in (its first part's key, chatStream.runsOf), and the dock's trail as always open
   const src = await readFile(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
   assert.match(src, /const folded = useFoldOpen\(lastFold \? `\$\{foldKey\(t\.id\)\}:\$\{lastFold\.id\}` : ""\), work = React\.useContext\(WorkCtx\), open = folded \|\| !work \|\| level !== "summary";/, "both hooks called on every render");
-  assert.match(src, /const Fold = \(\{ k, label, quiet = false, force = false, children \}\) => \{\r?\n  const open = useFoldOpen\(k\) \|\| force;/);
+  assert.match(src, /const Fold = \(\{ k, label, quiet = false, children \}\) => \{\r?\n  const open = useFoldOpen\(k\);/);
   // ...and the fold's open state is set by his click, in the render the click causes - heard from the native toggle (a task later), the line on
   // ACP followed the opened fold 75-90 ms late, saying the row's words under it (the judges' recording, 2026-11-18)
   const fold = src.slice(src.indexOf("const Fold = "), src.indexOf("// ONE RULE FOR EVERY FOLD"));

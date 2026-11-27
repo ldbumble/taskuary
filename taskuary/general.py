@@ -846,8 +846,6 @@ PRESSES = {'remind': lambda d: f"set a reminder for {clock_of(d.get('to'))} - pu
            # rv3", or nothing, the agent went on saying the dropped one "waits for Send")
            'slot_dropped': lambda d: f"dropped the {'email' if d.get('kind', 'email') == 'email' else d.get('kind') + ' message'} to {d.get('to') or 'them'} - it will not be sent",
            'offer': lambda d: f"accepted the offer: {_cut(' '.join(str(d.get('offer') or '').split()), 200)}".rstrip(': '),
-           # ...and the answer on an agent's permission card, said with what it allowed ("You permission answered." told nobody anything)
-           'permission_answered': lambda d: f"{ANSWERED.get(d.get('answer'), 'answered')}: {d.get('asked') or 'what the agent asked'}",
            # ...an APPROVED HELD STEP is the owner's press too, said with what it did (the owner, 2026-11-09: "once i approve it should say sent")
            'shell_act_done': lambda d: f"approved: {_held_what(d)} - " + (READ_ALLOWED if d.get('reads') and not d.get('command') else 'it ran'), 'browser_act_done': lambda d: f"approved: {_held_what(d)} - it ran on the page",
            'desktop_act_done': lambda d: f"approved: {_held_what(d)} - it ran", 'browser_act_refused': lambda d: 'approved it - the page did not take it',
@@ -885,7 +883,6 @@ def _on_page(d) -> str:
     # press, not a fact about the page; the agent is told to go on from the page as it is)
     if d.get('by') == 'done': return f"pressed {TURN_DONE}: {btn} on {site} is pressed" if btn else f"pressed {TURN_DONE} on {site}"
     return f'pressed {btn} on {site}' if btn else f'did the step on {site}'
-ANSWERED = {'allow_once': 'allowed', 'allow_always': 'allowed, from now on', 'reject_once': 'refused', 'reject_always': 'refused, from now on'}
 def _held_what(d) -> str: return _cut(' '.join(str(d.get('about') or d.get('what') or '').split()), 120) or 'the held step'
 # ...and what it said back, kept with the line: its link, the command folded under it
 HELD_DONE = ('shell_act_done', 'browser_act_done', 'desktop_act_done')
@@ -943,21 +940,13 @@ def press_lines(store, tid: int) -> list:
     # ...but an approved held step is its CARD in the turn, pressed (the owner, 2026-11-09: "leave the approval card in the agent turn as well
     # with approved") - and stays so after the owner writes again ("compact the land": it gave way to this line), drawn there (TaskPage
     # turnCards), so never a second time as a line
-    # ...AND HIS ANSWER TO AN AGENT'S PERMISSION REQUEST IS ITS CARD, pressed and greyed where it stood (the owner, 2026-11-17: "the approve
-    # card should never go anywhere and just say it was approved ... keep the action cards but gray out if passed"): `perm` - what it asked
-    # and his answer - lets the page draw the card it was, never a bare line in its place
-    perm = {r['Id']: _detail(r) for r in store._rows("SELECT Id, Detail FROM audit WHERE EntityType='task' AND EntityId=? AND Action='permission_answered'", (tid,))}
-    # ...but one asked ON ITS CALL'S ROW is that row's: the row says his answer (chatlog.asked_answered), and a line besides was a second record
-    from .chatlog import asked_on_row
-    rowed = asked_on_row(store, tid) if perm else set()
     # ...AND A PRESS ON THE WORK'S CARD IS SAID BY THAT CARD (the owner's rules, part 4; the card gallery, 2026-11-25: "✓ Pushed - Pushed 1 commit
     # to origin/master" on the card and "You pressed Push on the agent's work - it went through" under it): where the card is drawn it stays
     # in its turn, pressed, so its press is no line besides. Its agent hears it as before (events.audited)
     from . import landing
     carded = {r['Id'] for r in store._rows("SELECT Id FROM audit WHERE EntityType='task' AND EntityId=? AND Action='landed'", (tid,))} if landing.shown(store, tid) else set()
-    own = [{'id': f'press-{i}', 'role': 'user', 'press': True, 'content': [{'type': 'text', 'text': f'You {what}.'}], 'createdAt': at,
-            **({'perm': {'asked': str(perm[i].get('asked') or ''), 'answer': str(perm[i].get('answer') or '')}} if i in perm else {})}
-           for i, at, what, *x in presses(store, tid) if not x and i not in carded and not (i in perm and str(perm[i].get('call') or '') in rowed)]
+    own = [{'id': f'press-{i}', 'role': 'user', 'press': True, 'content': [{'type': 'text', 'text': f'You {what}.'}], 'createdAt': at}
+           for i, at, what, *x in presses(store, tid) if not x and i not in carded]
     return sorted(own + agent_set(store, tid), key=lambda m: int(m['id'].split('-')[1]))        # as they happened: one audit chain numbers both
 # ...and WHAT THE AGENT SET FOR THEM BY TOOL is a line at its time too (the agent walk, 2026-11-09: a reminder it set stood nowhere on the page
 # but in its own prose) - the page's alone: its own act is never told back to it
@@ -2905,10 +2894,6 @@ class GeneralSession:
                 self.trace = []; self.trace_revision += 1
                 # ...in plain words: the AI CLI agents page's own name read "CLI agent" on the failed card (the 2026-10-21 audit, R2)
                 raise RuntimeError(f"{NO_AI} - connect one on {words.name('ai')} to run this task")
-            # ...A TURN BEGINS: every card the conversation moved past is old news (proposals.move_on - the one rule, every agent kind)
-            from . import proposals
-            try: proposals.move_on(self.store, self.task_id)
-            except Exception as e: logger.debug(f'task {self.task_id}: the cards before this turn stayed live - {e}')
             from . import selfclose as _marks
             _marks.take_marks(self.task_id)          # ...a turn that failed before its answer was filed leaves no end_turn for this one
             from . import agenttools; agenttools.heard(self.task_id)       # ...nor a call it was heard making

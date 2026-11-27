@@ -10,7 +10,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 | Bucket | What it is for | Tools, and what each needs |
 |---|---|---|
 | **table** | decide about the item on the table | reply(text), approve, send_close, redraft(text), mine, regular_agent(text, new?), coding_agent(text, as?, new?), not_ours, not_ours_sender, block_sender, not_ours_kind, close, next, answer_agent(text), stop_agent, rerun, report_off, remember(text, subject, about?), setup(text), confirm, cancel, let_go, accept_invite, decline_invite, propose_time, find_time, prepare, elsewhere |
-| **task** | change any task - the table's or one by ref | task.update(priority/title/assignee/due), task.set_kind(kind), task.set_repo(repo), task.check(item, done?, note?), task.checklist(add?, items?, emails?, drop?), task.watch(what?), task.comment(text), task.split(text), task.merge(into), task.reopen, task.not_a_task, task.complete(note?), task.defer(until), task.handoff(who, note?), task.clarify(text), task.share(who, about?), review.approve, review.reject |
+| **task** | change any task - the table's or one by ref | task.update(priority/title/assignee/due), task.set_kind(kind), task.set_repo(repo), task.check(item, done?, note?), task.checklist(add?, items?, emails?, drop?), task.watch(what?), task.comment(text), task.split(text), task.merge(into), task.reopen, task.not_a_task, task.complete(note?), task.defer(until), task.handoff(who, note?), task.clarify(text), task.share(who, about?) |
 | **agents** | a task's agent; where work belongs | dispatch.prepare(kind, instructions?), agent.continue, agent.answer(text), agent.tell(text), agent.stop, agents.stop(refs/all), routing.remember(field, value), task.ask_agent(who, text) |
 | **new** | new work with no task yet | task.create_from_text(kind, text, channel?, to?), task.create_from_message(kind), meeting.new(who?, about?, when?, minutes?), task.setup(text) |
 | **pipe** | the walk and sets of items, and filing mail | pipe.clear(select, scope?), pipe.defer(select, until), pipe.close(select), pipe.remove(select, learn?), pipe.block(select, how?), pipe.mine(select), review.each, button.light(button, ref?, note?), item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule, message.retriage |
@@ -368,20 +368,6 @@ Email what a task's work found; the task's agent writes it and raises its card f
 - `who` - an address
 - `about` (optional)
 - `ref` (optional) - the task (TQ-0123), when it is not the one on the table
-
-<p class="runs">Brings up its button for you to press.</p>
-
-### `review.approve`
-
-The owner's yes to what is drafted: sends the reply as it stands - and on a task's finish card merges the pull request (or closes the issue) FIRST, sending the reply only if that worked. The task stays open: task.complete (Mark done) is the close.
-
-<p class="runs">Brings up its button for you to press.</p>
-
-### `review.reject`
-
-Reject the draft waiting on a task - nothing is sent, the task stays open. A REPLY draft is never rejected: Redraft (redraft) writes it again, Mark done (close) closes the task with nothing sent.
-
-- `ref` (optional) - the task
 
 <p class="runs">Brings up its button for you to press.</p>
 

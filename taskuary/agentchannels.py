@@ -14,7 +14,7 @@ IN. A line in a bound chat from a listed member goes to the bound agent through 
   - anyone else in the chat is ignored, and nothing in a bound chat becomes a task: the pollers ask `heard` first, and ingest
     refuses a bound chat's line whatever road it came by (`swallows`).
 OUT. This is the one exception to "the phone speaks only when asked": a bound chat is one the owner opened for exactly this. Only the
-bound agent's answers (a turn's last words), what it waits on you for, its permission requests and its landing question go there -
+bound agent's answers (a turn's last words), what it waits on you for and its landing question go there -
 and the replies to what was typed there. Nothing about other tasks, ever.
 
 SCOPE. One agent per chat, held to the binding's repo: a line is passed on only while the task's checkout is inside it (cwd_of), and
@@ -330,13 +330,9 @@ def _picked(b: dict, text: str):
 
 
 def _owner(store, b, m, text, files=()):
-    from . import permissions, landing
+    from . import landing
     q, act = _picked(b, text) if not files else (None, None)
     if act is not None:
-        if q['kind'] == 'perm':
-            out = permissions.answer(store, q['tid'], q['pid'], act, 'owner')
-            if not out.get('ok'): say(store, b, f"Nothing changed - {out.get('why')}."); _save_state(store, b, ask=None)
-            return
         if q['kind'] == 'land':
             _save_state(store, b, ask=None)
             try: out = landing.land(store, int(q['tid']), act, 'owner')
@@ -432,8 +428,8 @@ def _down(store, b: dict, e, tid=None):
 
 def on_event(store, tid: int, kind: str, text: str = '', source: str = ''):
     """workerstate.record's word that a turn ended or the agent asks the owner something: the answer, or what it waits on, to the chats
-    that hear this task. A permission request says itself (permission_asked)."""
-    if source == 'permission' or not rows(store): return
+    that hear this task."""
+    if not rows(store): return
     bs = following(store, tid)
     if not bs: return
     from . import agents
@@ -447,26 +443,6 @@ def on_event(store, tid: int, kind: str, text: str = '', source: str = ''):
 
 
 def _numbered(options: list) -> str: return '\n'.join(f'{i}. {lbl}' for i, (lbl, _) in enumerate(options, 1))
-
-
-def permission_asked(store, tid: int, pid: str, r: dict, bs: list = None):
-    from . import permissions
-    for b in following(store, tid) if bs is None else bs:
-        opts = [(permissions.LABEL[o], o) for o in r['options']]
-        _save_state(store, b, ask={'kind': 'perm', 'tid': int(tid), 'pid': pid, 'options': opts})
-        own = next((x.get('name') for x in b['members'] if x.get('role') == OWNER), '') or 'the owner'
-        say(store, b, f"{task_ref(tid)} asks permission: it {permissions.line(r)}.\nReply with a number - only {own} can answer:\n{_numbered(opts)}", tid)
-
-
-def permission_done(store, tid: int, pid: str, said: str):
-    from . import permissions
-    done = [b for b in following(store, tid) if ((b.get('state') or {}).get('ask') or {}).get('pid') == pid]
-    for b in done:
-        _save_state(store, b, ask=None)
-        say(store, b, said, tid)
-    # ...AND WHAT STILL WAITS ON THE TASK IS PUT AGAIN where the chat's one open ask just closed (two of the agent's helpers asking at once: the
-    # newer one answered, the older had no number left on the chat to answer it by)
-    if done and (rest := permissions.still_waiting(store, tid)): permission_asked(store, tid, *rest[0], bs=done)
 
 
 def ask_landing(store, b: dict, tid: int):

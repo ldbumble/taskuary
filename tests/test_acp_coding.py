@@ -8,7 +8,7 @@ from unittest import mock
 
 import pytest
 
-from taskuary import acpcoding, agents, blackboard, chatlog, codingchat, devphone, general, peers, permissions, session_artifacts, shellgate, terminal, waitroom
+from taskuary import acpcoding, agents, blackboard, chatlog, codingchat, devphone, general, peers, session_artifacts, shellgate, terminal, waitroom
 from taskuary.store import MemoryStore
 from taskuary import cardqueue, llm, origin
 
@@ -123,21 +123,6 @@ def test_its_registry_entry_is_what_the_board_peers_and_the_phone_read(world, mo
     # ...and while it touches a file, file:line is what a peer reads about it
     t.touched[str(repo / 'totals.py')]['at'] = time.time()
     assert t.touching() == ['totals.py:1']
-
-
-def test_a_push_it_asks_for_is_the_owners_buttons(world, monkeypatch):
-    s, tid, repo = world
-    monkeypatch.setenv('FAKE_ACP_ASK', 'git push origin main')
-    monkeypatch.setattr(shellgate, 'trusted', lambda *a, **k: '')
-    def press():
-        assert until(lambda: permissions.pending(tid, s))
-        p = permissions.pending(tid, s)[0]
-        assert 'git push origin main' in p['line']
-        permissions.answer(s, tid, p['id'], 'allow_once')
-    th = threading.Thread(target=press, daemon=True); th.start()
-    t = open_(s, tid, repo)
-    assert idle(t); th.join(5)
-    assert any(k == 'said' and x.startswith('granted') for k, x in t.history)
 
 
 def test_the_box_while_it_works_waits_and_goes_in_as_one_prompt_and_stop_cancels(world, monkeypatch):
@@ -669,67 +654,6 @@ def test_a_line_typed_into_a_turn_he_then_stops_is_answered_by_one_turn_under_th
     assert idle(t, 3) and not t._owed
 
 
-def test_a_waiting_card_never_moves_under_a_turn_that_only_stopped_at_his_allow(world, monkeypatch):
-    """Recorded on the real CLI, 2026-11-12: a reply waited for his Send under the first answer; the next turn stopped at a step for his
-    Allow once and the reply card moved down under it, went back up when he pressed (the turn at work again), down again as the turn went
-    on under his press, and down once more at its end - four places in twenty seconds. A card never moves (the owner, 2026-11-12: "nothing
-    ever goes backwards"): where it was first drawn it stays, greyed from the moment his line moved past it."""
-    from taskuary import conversation
-    s, tid, repo = world
-    monkeypatch.setenv('FAKE_ACP_ASK', 'git push origin main'); monkeypatch.setattr(shellgate, 'trusted', lambda *a, **k: '')
-    monkeypatch.setenv('FAKE_ACP_THINK', '0.6')              # the step comes once the line's hand-over has settled, as a real model's does
-    t = open_(s, tid, repo, seed=''); assert until(lambda: t.client and not t.busy)
-    rid = s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Hi Gail - the totals are commented.', 'Reason': 'reply'})
-    assert until(lambda: time.time() >= conversation.ep(s.get_review(rid)['CreatedAt']) + 1)        # (a stamp is a whole second)
-    live = lambda: [(x.get('id', '') if x['kind'] == 'turn' else 'own', c['status']) for x in conversation.items(s, tid)['items']
-                    for c in ([x] if x['kind'] == 'card' else x.get('cards') or []) if c['review'] == rid]
-    assert live() == [('own', 'pending')]
-    general.take_line(s, tid, 'Push it.', line_id='l-one')
-    assert until(lambda: permissions.pending(tid, s) and any(x['kind'] == 'turn' and x['steps'] for x in conversation.items(s, tid)['items'])), t.history
-    assert live() == [('own', 'passed')], conversation.items(s, tid)['items']                    # his line moved past it: greyed where it stood
-    permissions.answer(s, tid, permissions.pending(tid, s)[0]['id'], 'allow_once')
-    assert idle(t, 1)
-    # ...waited on as state: the turn's last updates are kept by the session's reader a beat after its prompt returns (a CI runner read the
-    # list at `idle` while it still ended on his press, the words under it not yet kept)
-    tail = lambda: [x['kind'] for x in conversation.items(s, tid)['items']][-3:]
-    assert until(lambda: tail() == ['turn', 'press', 'turn']), json.dumps([conversation.items(s, tid)['items'], s._rows('SELECT * FROM heard WHERE TaskId=?', (tid,)),
-                                                                         codingchat.acp_updates(tid, t.sid)], default=str)[:8000]
-    got = conversation.items(s, tid)['items']; turns = [x for x in got if x['kind'] == 'turn']
-    # ...and it never moved: greyed where it stood - and nothing brings it back by itself when that turn ends (the owner, 2026-11-26: "Nothing
-    # comes back automatically"; 11-25: "Never bring back things on top. It's a chat.")
-    assert live() == [('own', 'passed')], got
-    assert not turns[-2]['cards'] and not turns[-1]['cards'] and cardqueue.again_of(s, rid) is None, got
-
-
-def test_the_work_after_his_allow_never_counts_from_before_his_press(world, monkeypatch):
-    """The owner's live app, 2026-11-18 (a coding task, a push held for his Allow mid-turn): the turn ran, he allowed the push minutes later, and
-    under his answered card a new head read "AGENT · <the turn's start> · working 15m" - the work after his press stamped with the turn's start,
-    from before both the turn above and the press. What works after a press counts from it: never an earlier clock, in any read."""
-    from taskuary import conversation
-    s, tid, repo = world
-    monkeypatch.setenv('FAKE_ACP_ASK', 'git push origin main'); monkeypatch.setattr(shellgate, 'trusted', lambda *a, **k: '')
-    monkeypatch.setenv('FAKE_ACP_AFTER', '3')
-    t = open_(s, tid, repo, seed=''); assert until(lambda: t.client and not t.busy)
-    conversation.items(s, tid)                     # ...the task he has open: its chat is in the log before the turn, as live (chatlog.migrate_open)
-    general.take_line(s, tid, 'Push it.', line_id='l-one')
-    assert until(lambda: permissions.pending(tid, s))
-    assert until(lambda: time.time() >= (t.turn_at or time.time()) + 2.5)       # ...he presses a while after the turn began
-    pressed = time.time()
-    permissions.answer(s, tid, permissions.pending(tid, s)[0]['id'], 'allow_once')
-    bad = []
-    while t.busy or t.turns < 1:
-        # ...his answer stands on the row it was asked on (chatlog.asked_answered): what works after is under that row's part of the turn
-        got = conversation.items(s, tid)['items']
-        i = max((k for k, x in enumerate(got) if x['kind'] == 'turn' and any(y.get('answer') for y in x.get('steps') or [])), default=len(got))
-        bad += [(x['state'], round(pressed - x['started'], 1)) for x in got[i + 1:] if x['kind'] == 'turn' and x.get('started') and x['started'] < pressed - 1.01]
-        time.sleep(0.05)
-    assert idle(t, 1)
-    got = conversation.items(s, tid)['items']
-    assert any(y.get('answer') == 'allow_once' for x in got if x['kind'] == 'turn' for y in x.get('steps') or []), 'his answer is on its row'
-    assert not [x for x in got if x['kind'] == 'press'], 'the row is the one record of his answer'
-    assert not bad, f'work under his press counted from before it (seconds early): {bad[:5]}'
-
-
 def test_a_coding_chat_reads_in_the_same_order_once_its_session_has_closed(world, monkeypatch):
     """Recorded on the real CLI, 2026-11-12 (Send and close on a coding task, then the task opened again): his two lines stood first, then
     the reply card by itself, then both turns - every step of the closed session stamped at the moment its transcript was filed, which is
@@ -746,20 +670,6 @@ def test_a_coding_chat_reads_in_the_same_order_once_its_session_has_closed(world
     t.close(); assert until(lambda: not codingchat._live(tid) and s._rows('SELECT 1 FROM transcript WHERE TaskId=?', (tid,)))
     # ...in the same order - under it only the task's own line that its run is over (conversation.items `n:left`)
     got = shape(); assert got[:-1] == was and got[-1][0] == 'note' and got[-1][1].startswith('n:left'), got      # (its key names the turn it closes)
-
-
-def test_a_line_is_never_the_answer_to_a_step_whose_buttons_are_a_beat_away(world, monkeypatch):
-    """A step that waits on his Allow is on the rail a beat before its buttons exist (permissions.ask writes the request down first). A
-    line handed over in that beat was written down as the step's answer - which refused the step and filed its Approve card instead.
-    It waits by the box, as a line under the buttons does."""
-    from taskuary import workerstate as ws
-    s, tid, repo = world
-    t = open_(s, tid, repo, seed=''); assert until(lambda: t.client and not t.busy)
-    ws.record(s, tid, t.sid, 'approval_needed', request_id='q:0123456789:1', text='The agent wants to run `git push origin main`',
-              choices=['Allow once', 'Reject'], source='permission')                              # ...the request, its PENDING row not yet made
-    assert waitroom.state(s, tid)[0] == 'asking' and not permissions.pending(tid, s)
-    assert waitroom.add(s, tid, 'What does that push carry?', 'owner')['state'] == 'held_ask'
-    assert [e['Kind'] for e in s.worker_events(tid)][-1] == 'approval_needed' and len(s.waiting_notes(tid)) == 1
 
 
 def test_a_held_step_he_asks_the_coding_agent_about_greys_in_place_and_is_held_anew_when_run_again(world, monkeypatch):
@@ -835,26 +745,6 @@ def test_a_conversation_the_cli_no_longer_has_starts_afresh_with_the_task_never_
     assert 'heard:' in said and 'carry on with the totals' in said and 'resumed=' not in said
     notes = [c['Body'] for c in s.list_comments(tid)]
     assert agents.GONE_LINE in notes and not any('No conversation found' in n or 'did not start over ACP' in n for n in notes)
-
-
-def test_stop_while_it_asks_closes_the_card_and_no_press_is_offered_for_a_turn_that_ended(world, monkeypatch):
-    """Stop pressed while the agent waited on Allow once / Reject: session/cancel ended the turn, but the card stayed lit for its ten minutes -
-    a press offered for a step nobody would run, and then "No answer in 10 mins" of a turn he had stopped himself. ACP's own rule: a client
-    that cancels answers every permission it holds as cancelled. The card closes at the Stop, and the agent is refused - by nobody."""
-    s, tid, repo = world
-    monkeypatch.setenv('FAKE_ACP_ASK', 'rm -rf /srv/ledger-archive')
-    monkeypatch.setattr(shellgate, 'trusted', lambda *a, **k: '')
-    t = open_(s, tid, repo, seed='tidy the ledger archive')
-    assert until(lambda: permissions.pending(tid, s))
-    assert t.cancel()
-    assert until(lambda: not permissions.pending(tid, s), 5), 'the card closes at the Stop'
-    assert until(lambda: not t.busy, 5)
-    said = [c['Body'] for c in s.list_comments(tid)]
-    assert not any(b.startswith('No answer in') for b in said), said
-    assert any(b.startswith('Closed when you stopped the agent') and 'rm -rf /srv/ledger-archive' in b for b in said), said
-    time.sleep(1.5)
-    assert t.turns == 1 and not t.busy and not permissions.pending(tid, s), 'a Stop is a stop: nothing starts the agent again'
-    assert t.stop_reason == 'cancelled'
 
 
 @pytest.mark.parametrize('end, then', [({'nothing_left': False}, 'tell Ray the totals are in'), ({'nothing_left': True}, None)])

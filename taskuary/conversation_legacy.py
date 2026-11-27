@@ -605,8 +605,7 @@ def _items(store, tid: int) -> dict:
     # backwards"): no card is moved under a later answer, copied there, or left behind as a ghost - he moves on past one by writing again (a
     # draft above his newer line is set aside then, `hear`), and the agent raises what is still owed as a new card in its own turn.
     # ...AND A TURN'S CARD IS DRAWN ONCE THE TURN HAS ENDED, as its last thing (the owner, 2026-11-12: "it should finish thinking and last thing
-    # should be show action box" - its words landed above a card drawn while it worked): a step it is stopped at waits on him mid-turn as its
-    # permission (`permissions`, drawn under the turn), never as a card in it
+    # should be show action box" - its words landed above a card drawn while it worked)
     # ...AND A TURN THAT GOES ON FROM THE ONE BEFORE IT, WITH NO INPUT BETWEEN, IS THE SAME WORK (the owner's live task, 2026-11-13: a turn
     # left its reply card, Taskuary woke its agent a beat later, and the woken turn's words were drawn UNDER that card - "text after the
     # action box"): what still waits for his press stands at the END of the run, under its last words - once the turn that goes on has
@@ -618,8 +617,6 @@ def _items(store, tid: int) -> dict:
             for c in lit:
                 if hosts.get(c['id']) != b['id']:
                     store._exec('INSERT INTO shown (TaskId, Key, Seq, Host) VALUES (?,?,0,?) ON CONFLICT(TaskId, Key) DO UPDATE SET Host=excluded.Host', (tid, f"c:{c['id']}", b['id']))
-    from . import permissions
-    perms = permissions.pending(tid, store)
     for x in out:
         # ...a turn at work holds back only what it has not drawn yet: a card already shown in it stays (the owner, 2026-11-13: "never close
         # actions boxes" - a Send woke the agent, the same turn went on, and the other email waiting in it vanished until the turn ended)
@@ -674,10 +671,6 @@ def _items(store, tid: int) -> dict:
     ask = taskstate.asking(store, store.get_task(tid) or {'TaskId': tid}, general.session_for(tid) or (live if codingchat._live(tid) else None))
     # A QUESTION IS SAID ONCE, IN ITS TURN'S OWN WORDS, ABOVE ITS CARD (the owner, 2026-11-11; the recorded walk drew it a second time under
     # the reply card): where the newest answer already holds the ask's words the list says `said`, and the page draws no line of its own
-    # A STEP THAT WAITS ON HIS ALLOW IS ONE CARD (the owner, 2026-11-11: "the question has 2 approve buttons?" - recorded on a coding agent: the
-    # permission's card with Allow once / Reject, and under it the same request again as the agent's question, with the same two buttons):
-    # the request a permission made is `permissions`' to draw, never the agent's question beside it
-    if ask and ask.get('source') == 'permission' and perms: ask = None
     flat = lambda v: ' '.join(re.sub(r'[*_`]', '', str(v or '')).split())
     last = next((x for x in reversed(out) if x['kind'] == 'turn'), None)
     if last and last['state'] == 'failed' and (notice := cli_quota(last.get('fail'))):
@@ -733,7 +726,7 @@ def _items(store, tid: int) -> dict:
     # box, messages as counts on their sender's chip - and `now` says whether a waiting line can be handed into the turn at work at once (a
     # session that takes words mid-turn, not stopped at his Allow); `dropped`: the lines he took back, which leave no trace
     live_ = codingchat._live(tid)
-    now = bool(at_work and pend and not perms and live_ is not None and getattr(live_, 'steerable', lambda: False)())
+    now = bool(at_work and pend and live_ is not None and getattr(live_, 'steerable', lambda: False)())
     later = LATER if at_work and any(p['kind'] == 'line' for p in pend) and not getattr(general._live_of(tid), 'hears_mid_turn', lambda: True)() else ''
     dropped = [json.loads(r['Detail'] or '{}').get('line') for r in store._rows("SELECT Detail FROM audit WHERE EntityType='task' AND EntityId=? AND Action='line_dropped'", (tid,))]
     # A START THAT DID NOT HAPPEN SAYS WHY, WHERE HE LOOKS (the owner's rule 4; recorded on the real CLI, 2026-11-15: the switch off, the task
@@ -751,7 +744,7 @@ def _items(store, tid: int) -> dict:
         m = next(iter(store.list_messages(tid)), None) or {}
         if (name := str(m.get('SourceName') or m.get('Subject') or '').strip()): first['came'] = name
     body = {'items': out, 'pending': pend, 'now': now, 'later': later, 'dropped': [d for d in dropped if d], 'working': at_work, 'started': t0 if at_work else None, 'asking': ask,
-            'permissions': perms, 'live': codingchat.live_of(codingchat._live(tid)),
+            'live': codingchat.live_of(codingchat._live(tid)),
             'letters': letters, 'idle': idle,
             # ...and the line of cards (cardqueue): which one stands, which wait behind it unseen, and what the one standing says of them
             'queue': {'live': queue['live'], 'held': queue['held'], 'line': cardqueue.line(queue)}, 'hold': hold_ and {**{k: hold_[k] for k in ('line', 'person', 'org')},

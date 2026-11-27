@@ -390,6 +390,26 @@ class DecisionTests(unittest.TestCase):
         self.assertEqual(out['options'], ['Coding agent', 'Regular agent'])
         self.assertIn('Nothing has been started', out['say'])
 
+    def test_on_the_desk_a_typed_yes_runs_nothing_and_the_rail_has_no_send_of_its_own(self):
+        """The owner, 2026-11-27: "ANY approval is ONE ACTION CARD" - the press on the card inside the task. A "yes" typed to the Assistant ran
+        the proposal waiting in its chat, the rail's line carried its own Send and Send and close, and the Assistant had review.approve and
+        review.reject to press a card for him. On the desk the yes is his line and runs nothing, the rail's words hold no send, and the
+        Assistant has no tool that approves; the phone keeps its text yes, his to decide."""
+        from taskuary import toolcatalog
+        s = store()
+        t, m, r = drafted(s)
+        concierge.surface(s, key=f'review:{r}', llm=lambda *a, **k: 'Dana needs the corrected export.')
+        yes = 'Sending it.\nCALL: {"kind": "confirm", "params": {}}'
+        with mock.patch.object(concierge, 'confirm_open', return_value={'say': 'ran', 'options': [], 'chips': [], 'decision': {'verb': 'confirm'}}) as ran:
+            out = concierge.say(s, 'yes', key=f'review:{r}', llm=lambda *a, **k: yes)
+            self.assertEqual((out['say'], out.get('decision'), ran.call_count), (concierge.TYPED_YES, None, 0))
+            with phone(): concierge.say(s, 'yes', key=f'review:{r}', llm=lambda *a, **k: yes)
+            self.assertEqual(ran.call_count, 1, "the phone's text yes is kept")
+        it = {'key': f'review:{r}', 'kind': 'review', 'lane': 'approve', 'rid': r, 'tid': t, 'mid': m, 'draft': True}
+        self.assertFalse({'approve', 'send_close'} & {c['verb'] for c in concierge.chips_for(s, it)})
+        with phone(): self.assertLessEqual({'approve', 'send_close'}, {c['verb'] for c in concierge.chips_for(s, it)})
+        self.assertFalse({'review.approve', 'review.reject'} & (set(toolcatalog.PURPOSE) | {k for _b, _w, ks in toolcatalog.BUCKETS for k in ks}))
+
 
 class BrainTests(unittest.TestCase):
     def test_the_cli_is_the_default_brain_on_its_light_gear_and_picks_its_conversation_back_up(self):

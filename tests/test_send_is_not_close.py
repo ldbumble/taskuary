@@ -110,7 +110,9 @@ def test_a_send_does_not_settle_the_table():
 
 def test_the_advisor_offers_send_before_and_mark_done_after(s):
     tid, mid, rid = make_review(s, task_kind='general')
-    before = [v['verb'] for v in rulebook.offered(s, {'kind': 'review', 'lane': 'approve', 'rid': rid, 'tid': tid, 'mid': mid, 'draft': True, 'key': f'review:{rid}'})]
+    it = {'kind': 'review', 'lane': 'approve', 'rid': rid, 'tid': tid, 'mid': mid, 'draft': True, 'key': f'review:{rid}'}
+    # ...the phone's numbered choices: Close out's two sends first (the owner, 2026-11-03)
+    with concierge.delivering(concierge.PHONE): before = [v['verb'] for v in rulebook.offered(s, it)]
     assert before[:2] == ['send_close', 'approve'], 'Close out\'s two sends first, Send and close leading (the owner, 2026-11-03)'
     send(s, rid)
     with mock.patch('taskuary.terminal.live_sessions', return_value=[]):

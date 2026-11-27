@@ -1178,34 +1178,6 @@ class TheList(unittest.TestCase):
         turns = [x for x in self.list()['items'] if x['kind'] == 'turn']
         self.assertEqual([[(c['id'], c['status']) for c in t['cards']] for t in turns], [[(f'r:{rid}', 'failed')], []])
 
-    def test_a_step_that_waits_on_his_allow_is_one_card_never_the_agents_question_beside_it(self):
-        """The owner's live task, 2026-11-11 ("the question has 2 approve buttons?"), recorded on a coding agent: the permission's card with
-        Allow once / Reject, and under it the same request again as the agent's question with the same two buttons. The list hands the
-        page the permission; the request it made is not also `asking`. A question the agent asked in words still is."""
-        from taskuary import permissions, taskstate
-        self.say('Remove the old export.', 'l-one'); self.rest()
-        ask = {'request_id': 'q:1:1', 'kind': 'approval_needed', 'text': 'The agent wants to run `rm old-export.csv`', 'choices': ['Allow once', 'Reject'], 'source': 'permission'}
-        with mock.patch.object(taskstate, 'asking', return_value=ask), mock.patch.object(permissions, 'pending', return_value=[{'id': 'p1', 'tid': self.tid}]):
-            got = self.list()
-        self.assertEqual((len(got['permissions']), got['asking']), (1, None))
-        with mock.patch.object(taskstate, 'asking', return_value={**ask, 'source': 'acp', 'choices': []}): self.assertTrue(self.list()['asking'])
-
-    def test_his_answer_to_a_step_that_waited_stands_in_the_chat_from_the_press(self):
-        """The recorded hold, 2026-11-11: he pressed Allow once, the turn it had stopped went on - and his press waited by the box as if
-        nobody had heard it, then entered above work already drawn. The turn that waited on it hears it as it is pressed."""
-        self.brain.delay = HOLD
-        self.say('Remove the old export.', 'l-one', wait=False)
-        self.assertTrue(until(lambda: self.list()['working'] and any(x['kind'] == 'turn' for x in self.list()['items'])))
-        # ...and handed over, at work in its brain: a turn is drawn from his line, before its hand-over - and a press made in that beat is one
-        # the hand-over itself hears, in the chat at once and never by the box (macOS CI, 2026-11-26: pending read [])
-        self.at_work()
-        self.s.audit('task', self.tid, 'permission_answered', 'owner', detail={'answer': 'allow_once', 'asked': 'delete old-export.csv'})
-        self.assertEqual([x['kind'] for x in self.list()['pending']], ['press'])
-        conversation.hear_press(self.s, self.tid, 'permission_answered')
-        got = self.list()
-        self.assertEqual((got['pending'], [x['kind'] for x in got['items']].count('press'), got['working']), ([], 1, True))
-        self.brain.delay = 0; self.rest()
-
     def test_a_turn_its_session_was_closed_under_is_no_turn_a_restart_cut_days_later(self):
         """A session closed under its turn while Taskuary ran on (Stop and save, a hand-off) left the turn on disk as one still under way: the
         next restart, whenever it came, filed its old words at the foot of the chat as "Cut short when Taskuary restarted - type to carry on"
@@ -1227,14 +1199,14 @@ class TheList(unittest.TestCase):
     def test_a_line_heard_by_a_turn_still_coming_up_is_cut_with_it(self):
         """His line was taken and heard by the turn before that turn was first written to disk - a provider picked, the cards before it moved
         on: a restart in between left the line heard with nothing under it, nothing running and nothing saying it was cut."""
-        from taskuary import proposals
+        from taskuary import selfclose
         self.say('Suggest two.', 'l-one'); self.rest()
         up, go, cut = threading.Event(), threading.Event(), []
-        real = proposals.move_on
+        real = selfclose.take_marks
         def coming_up(*a, **k):
             if not up.is_set(): up.set(); cut.extend(general.keep_cut_turns(self.s)); go.wait(5)      # the next start reads the disk here
             return real(*a, **k)
-        with mock.patch.object(proposals, 'move_on', coming_up):
+        with mock.patch.object(selfclose, 'take_marks', coming_up):
             self.say('Compare both in detail.', 'l-two', wait=False)
             self.assertTrue(up.wait(5)); go.set()
             self.rest()
@@ -1243,7 +1215,7 @@ class TheList(unittest.TestCase):
     def test_a_line_a_cut_turn_took_is_heard_by_the_resumed_conversation_after_the_restart(self):
         """The turn a restart cut had taken his line, and went before its CLI was handed it. The next session picked the CLI's conversation
         back up, which is told only the new turn: his line stood heard in the chat, and no agent ever read it."""
-        from taskuary import proposals, terminal
+        from taskuary import selfclose, terminal
         self.say('Suggest two.', 'l-one'); self.rest()
         old = general.session_for(self.tid)
         up, go = threading.Event(), threading.Event()
@@ -1253,7 +1225,7 @@ class TheList(unittest.TestCase):
         def turn():
             try: old.send_prompt('Compare both venues on price.', echo=False)
             except Gone: pass
-        with mock.patch.object(proposals, 'move_on', coming_up):
+        with mock.patch.object(selfclose, 'take_marks', coming_up):
             t = threading.Thread(target=turn, daemon=True); t.start()
             self.assertTrue(up.wait(5)); go.set(); t.join(5)
         old.alive = False; terminal.SESSIONS.pop(old.sid, None); general.drop_session(self.tid); general.answered(self.tid, every=True)
@@ -1264,13 +1236,13 @@ class TheList(unittest.TestCase):
         self.assertIn('Compare both venues on price.', self.brain.calls[-1])      # ...its event past the cursor still: told again
 
     def test_a_turn_the_app_closing_cut_is_kept_for_the_next_start(self):
-        from taskuary import proposals, sessionrecord, terminal
+        from taskuary import selfclose, sessionrecord, terminal
         self.say('Suggest two.', 'l-one'); self.rest()
         self.brain.delay = HOLD
         # ...its first words written while the turn's start is still being set up (CI on macOS, 0.4.0.27): busy from the hand-over, the start
         # named its provider later by drawing its trace again from nothing - and the words already said went, from the chat and from disk
-        said, move_on = threading.Event(), proposals.move_on
-        with mock.patch.object(proposals, 'move_on', lambda *a, **k: said.wait(10) and move_on(*a, **k)):
+        said, take = threading.Event(), selfclose.take_marks
+        with mock.patch.object(selfclose, 'take_marks', lambda *a, **k: said.wait(10) and take(*a, **k)):
             self.say('Compare both in detail.', 'l-two', wait=False)
             self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
             ses = general.session_for(self.tid)
@@ -1632,17 +1604,6 @@ def test_a_routine_run_opens_on_the_routine_and_its_objective():
     s.add_comment(t2, 'owner', general.USER_TYPE, 'Which venue is cheapest?')
     s.add_comment(t2, 'assistant', general.ASSISTANT_TYPE, 'The second one.')
     assert [x['kind'] for x in conversation.items(s, t2)['items']] == ['line', 'turn']
-
-
-def test_his_answer_to_a_permission_request_is_its_card_greyed_where_it_stood():
-    """The owner, 2026-11-17: "the approve card should never go anywhere and just say it was approved ... keep the action cards but gray out
-    if passed" - his Allow on a coding agent's permission request left only "You allowed: ..." in its place. The press carries what it asked
-    and his answer, and the page draws the card it was."""
-    s = MemoryStore()
-    tid = s.create_task({'Title': 'Ship the board', 'Kind': 'coding', 'Status': 'open'}, 'o')
-    s.audit('task', tid, 'permission_answered', 'owner', detail={'pid': 'p1', 'answer': 'allow_once', 'pattern': 'Bash:git push', 'asked': 'Push the merge to deploy'})
-    p = next(x for x in conversation.items(s, tid)['items'] if x['kind'] == 'press')
-    assert p['perm'] == {'asked': 'Push the merge to deploy', 'answer': 'allow_once'}
 
 
 def test_an_act_he_dismissed_stays_its_own_card_with_its_words():

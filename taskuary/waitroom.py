@@ -316,15 +316,7 @@ def _deliver(store, tid: int, new: int = None) -> dict:
     # ...a coding agent over ACP is answered as a chat is: by its next turn, his words drawn as his and the turn at work from them - typed as a
     # bare answer, his line was nobody's and the chat read "working" for the rest of the run (the audit, 2026-11-10)
     if st == 'asking' and term.is_acp(t):
-        from . import permissions, workerstate as ws
-        # ...BUT A STEP THAT WAITS ON HIS ALLOW IS ANSWERED BY ITS BUTTONS ALONE (the pane's rule below, workerstate.LINE; the recorded hold,
-        # 2026-11-11): its turn is still on, stopped at that call, so a line typed then can be heard by nobody until he presses. It was
-        # written down as the answer, steered at the stopped turn - dots under it for as long as he did not press - and handed over a second
-        # time once the turn moved: told twice, drawn twice. It keeps its place by the box and goes in when the buttons were pressed
-        # ...from the moment the step is on the rail - a beat before its buttons exist (permissions.ask writes the request down first): a
-        # line handed over in that beat was written down as the step's answer, which refused it
-        if permissions.pending(tid, store) or ((req := ws.asking_of(store, t)) or {}).get('source') == 'permission':
-            return {'delivered': 0, 'state': 'held_ask', 'left': len(pending)}
+        from . import workerstate as ws
         if (req := ws.asking_of(store, t)):
             who = 'owner' if any(_by(x) == 'owner' for x in notes) else 'router'
             ws.record(store, tid, t.sid, 'answered', request_id=req['request_id'], text=parts(notes[0]['Note'])[0][:500], source=ws.said_by(who))

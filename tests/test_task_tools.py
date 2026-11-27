@@ -40,7 +40,7 @@ class CatalogueTests(unittest.TestCase):
         block = toolcatalog.block()
         for kind in ('task.update', 'task.set_kind', 'task.set_repo', 'task.check', 'task.comment', 'task.handoff', 'task.merge',
                      'task.clarify', 'task.reopen', 'task.not_a_task', 'task.complete', 'task.defer', 'task.split',
-                     'dispatch.prepare', 'agent.continue', 'agent.stop', 'agent.answer', 'review.approve', 'review.reject'):
+                     'dispatch.prepare', 'agent.continue', 'agent.stop', 'agent.answer'):
             self.assertIn(kind, block, kind)
 
     def test_forward_and_split_are_tools_not_words_the_code_matches(self):
@@ -230,14 +230,6 @@ class ToolTests(unittest.TestCase):
         dock = concierge.general.dock_task(s, 'owner')[0]['TaskId']
         with self.assertRaises(concierge.CallMiss):
             concierge.call_turn(s, dock, {'kind': 'task.share', 'params': {'who': 'Omar Keller', 'ref': f'TQ-{tid}'}}, item, 'send it to Omar')
-
-    def test_reject_the_draft_leaves_the_task_open(self):
-        s, tid, rid, item = T.ResponseTests()._drafted()
-        p, _ = call(s, 'review.reject', key=item['key'])
-        self.assertEqual(p['target'], rid)
-        self.run_card(s, p)
-        self.assertEqual(s.get_review(rid)['Status'], 'rejected')
-        self.assertNotEqual(s.get_task(tid)['Status'], 'done')
 
     def test_stop_names_its_agent_or_stops_nothing(self):
         s, tid, mid, item = table()

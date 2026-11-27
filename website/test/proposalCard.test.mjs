@@ -4,7 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { proposalOf, describe, afterExecute, afterConfirm, afterCancel, markExecuted, liveProposal, holdsProposal, isLive } from "../src/proposalCard.js";
+import { proposalOf, describe, afterExecute, afterConfirm, afterCancel, liveProposal, holdsProposal, isLive } from "../src/proposalCard.js";
 
 const p = { id: "ab12", kind: "task.create_from_message", target: 7, version: 1, status: "proposed", verb: "coding_agent",
   params: { kind: "coding", instructions: "check the June rows" }, label: "Send to the coding agent",
@@ -48,19 +48,6 @@ test("the server's receipt is the one drawn - never a second, shorter Done besid
 
 test("cancel is a receipt that nothing changed", () => {
   assert.deepEqual(afterCancel(p), { receipt: "Cancelled - nothing changed; TQ-0007 is where it was.", status: "cancelled" });
-});
-
-// A typed "yes, go ahead" is answered by concierge.confirm_open, which RUNS the operation before it
-// replies. The page has no execute left to do - it only has to stop the card saying "proposed".
-test("a yes said in words settles the card the server already ran", () => {
-  const msgs = [{ id: "a1", proposal: { id: "ab12", status: "proposed" } },
-                { id: "a2", proposal: { id: "zz99", status: "proposed" } },
-                { id: "u1", text: "yes, go ahead" }];
-  const out = markExecuted(msgs, { id: "ab12", kind: "task.create_from_message", status: "done" });
-  assert.equal(out[0].proposal.status, "done");
-  assert.equal(out[1].proposal.status, "proposed");     // somebody else's card is not touched
-  assert.equal(out[2].text, "yes, go ahead");
-  assert.equal(markExecuted(msgs, undefined), msgs);    // nothing executed: the thread is left exactly as it was
 });
 
 // A sweep clears the pipe by SELECTOR, and when what it clears includes the item on the table it has

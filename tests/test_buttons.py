@@ -43,7 +43,8 @@ ITEMS = [
     {'kind': 'connection', 'key': 'conn:1', 'title': 'Mail stopped answering'},
     {'kind': 'task', 'key': 'task:15', 'title': 'Lease figures from Ray', 'tid': 15, 'lane': 'forgotten'},
 ]
-def chips(item): return concierge.chips_for(None, item)
+def chips(item):
+    with concierge.delivering(concierge.PHONE): return concierge.chips_for(None, item)      # the phone's words: the desk's rail draws no Send
 
 
 class Contract(unittest.TestCase):

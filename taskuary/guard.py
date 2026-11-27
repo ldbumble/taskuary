@@ -210,7 +210,7 @@ OWNER_ONLY = (
     (r'POST', r'^/api/cloudfix/setup$', 'it commits a workflow to the repository - only ever the owner pressing Set up (cloudfix.install)'),
     (r'POST|PATCH|DELETE', r'^/api/operations(/[^/]+(/(execute|preview))?)?$',
      'a proposal runs approvals, settings and hand-offs - confirming one is the owner, whatever its kind'),
-    (r'POST|PUT|PATCH|DELETE', r'^/api/reviews/\d+(/(attachment|closeout/[a-z_-]+|draft|envelope|release))?$',
+    (r'POST|PUT|PATCH|DELETE', r'^/api/reviews/\d+(/(attachment|closeout/[a-z_-]+|draft|envelope|release|held))?$',
      "a pending reply - its words, recipients and attachments - is the owner's; an agent drafts through --reply"),
     (r'POST', r'^/api/concierge/[a-z/]+$', "the owner's chat with the assistant"),
     (r'POST', r'^/api/walk/(start|next|back|open|leave)$', "the walk's moves are the owner's presses, as /api/concierge/next was - a leave closes the row"),

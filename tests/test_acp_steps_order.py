@@ -123,3 +123,45 @@ def test_a_view_the_agent_showed_rides_on_its_step_to_the_page_live_and_after_a_
     assert spec(conversation.items) == SPEC, 'its answer filed'
     chatlog._FEEDS.clear()
     assert spec(conversation.items) == SPEC, 'a fresh read'
+
+
+
+# WALK 26 (2026-11-27): every agent read his skill by its name (their own logs) and every road's line said "read your skills" - the kept step
+# had dropped what the tool was called with. One reader (conversation._served) for each shape a road sends a Taskuary tool's call in
+NAMED = {'name': 'social-posts'}
+def _tc(raw, meta=None, **k): return {'sessionUpdate': 'tool_call', 'toolCallId': 'k1', 'status': 'in_progress', 'rawInput': raw, **({'_meta': meta} if meta else {}), **k}
+SKILL_ROADS = {
+    # claude-agent-acp: the input bare, the tool named beside it
+    'claude': [_tc(NAMED, {'claudeCode': {'toolName': 'mcp__taskuary__skills'}}, kind='other', title='skills')],
+    # codex-acp: {server, tool, arguments} - whole at the start, or named first and its arguments on the update that ends it, or as JSON text
+    'codex': [_tc({'server': 'taskuary', 'tool': 'skills', 'arguments': NAMED}, kind='execute', title='mcp.taskuary.skills')],
+    'codex, arguments late': [_tc({'server': 'taskuary', 'tool': 'skills', 'arguments': None}, kind='execute', title='mcp.taskuary.skills'),
+                              {'sessionUpdate': 'tool_call_update', 'toolCallId': 'k1', 'status': 'completed',
+                               'rawInput': {'server': 'taskuary', 'tool': 'skills', 'arguments': NAMED}}],
+    'codex, arguments as text': [_tc({'server': 'taskuary', 'tool': 'skills', 'arguments': json.dumps(NAMED)}, kind='execute')],
+    # the HIPAA AI card's harness: use_tool around it, the inner arguments as JSON text - and the outer ones too
+    'card': [_tc({'server': 'taskuary', 'tool': 'use_tool', 'arguments': {'name': 'skills', 'arguments': json.dumps(NAMED)}}, kind='execute')],
+    'card, arguments as text': [_tc({'server': 'taskuary', 'tool': 'use_tool', 'arguments': json.dumps({'name': 'skills', 'arguments': json.dumps(NAMED)})}, kind='execute')],
+    # the API agent's loop: its trace, the tool bare or through use_tool
+    'api': [('trace', {'type': 'tool_call', 'name': 'skills', 'detail': {'tool_call_id': 'k1', 'args': NAMED}})],
+    'api, arguments as text': [('trace', {'type': 'tool_call', 'name': 'skills', 'detail': {'tool_call_id': 'k1', 'args': json.dumps(NAMED)}})],
+    'api, use_tool': [('trace', {'type': 'tool_call', 'name': 'use_tool', 'detail': {'tool_call_id': 'k1', 'args': {'name': 'skills', 'arguments': json.dumps(NAMED)}}})],
+}
+
+
+@pytest.mark.parametrize('road', SKILL_ROADS)
+def test_the_skill_a_turn_read_is_kept_by_its_name_on_every_road(road):
+    from taskuary.conversation import acp_of_trace, acp_steps
+    ups = [x for u in SKILL_ROADS[road] for x in (acp_of_trace(u[1]) if isinstance(u, tuple) else [u])]
+    [s] = acp_steps(ups)
+    assert s['name'].split('__')[-1] == 'skills' and s['args'] == NAMED, s
+    # ...and it is on the row the page draws, which reads the line's name from it (agentSteps OWN.skills: "Read your skill 'social-posts'")
+    from taskuary.chatlog import one_step
+    assert one_step(s)['args'] == NAMED
+
+
+def test_a_cli_tool_of_its_own_keeps_only_what_its_row_says():
+    # ...and nothing else changes: a CLI's own Write is not Taskuary's tool, and its content is not kept on the step
+    from taskuary.conversation import acp_steps
+    [s] = acp_steps([_tc({'file_path': 'C:/work/menu.md', 'content': 'x' * 5000}, {'claudeCode': {'toolName': 'Write'}}, kind='edit', title='Write')])
+    assert s['name'] == 'Write' and s['args'] == {'file_path': 'C:/work/menu.md'}

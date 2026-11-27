@@ -406,6 +406,26 @@ def _meta(u, *ks):
     return m
 
 
+# A SERVER'S TOOL AS ITSELF, WITH WHAT IT WAS CALLED WITH - ONE READER OF EVERY ROAD'S SHAPE (the owner's live app, 2026-11-19: codex-acp sends
+# one as kind `execute`, its input {server, tool, arguments} - read as a shell with no command, the row said "Ran a command it did not show"
+# over a reply it drafted. Walk 26, 2026-11-27: every agent read his skill by name and no road's row said which - claude-agent-acp sends a
+# tool's input bare under the tool's name, the API agent's loop the same, a harness its arguments as JSON text, and an adapter may name the
+# call before it has them; each was kept with no arguments). use_tool's is the tool it ran (agenttools.as_called)
+def _served(u):
+    "(the tool's name, its arguments) where an update's rawInput is a call to a server's tool or to one of Taskuary's own - else None."
+    from .agenttools import ALIAS, SERVER, TOOLS, USE, _arguments, as_called
+    if not isinstance(raw := u.get('rawInput'), dict): return None
+    if raw.get('server') and raw.get('tool'): server, tool, a = str(raw['server']), str(raw['tool']), raw.get('arguments')
+    else:
+        server, tool = re.fullmatch(r'(?:mcp__(.+?)__)?(.*)', str(_meta(u, 'taskuary', 'tool') or _meta(u, 'claudeCode', 'toolName') or '')).groups()
+        if server != SERVER and (server or tool not in TOOLS and tool not in ALIAS and tool != USE): return None
+        a = raw
+    try: a = _arguments(a)
+    except ValueError: a = {}
+    tool, a = as_called(SERVER if server is None else server, tool, a)
+    return (f'mcp__{server}__{tool}' if server else tool), dict(a or {})
+
+
 def acp_steps(updates: list) -> list:
     "An ACP session's kept updates (codingchat.record_update) as steps - {k, text|name+args, at} - with each step's place (`n`) and its `line`."
     out, by, compacts = [], {}, {}
@@ -447,16 +467,9 @@ def acp_steps(updates: list) -> list:
             s = by.get(u.get('toolCallId'))
             if not s:
                 if kind == 'tool_call_update' and not (u.get('rawInput') or u.get('title') or u.get('kind')): continue
-                # ...A SERVER'S TOOL AS ITSELF (the owner's live app, 2026-11-19: codex-acp sends one as kind `execute`, its input {server, tool,
-                # arguments} - read as a shell with no command, the row said "Ran a command it did not show" over a reply it drafted)
-                mcp = raw if isinstance(raw := u.get('rawInput'), dict) and raw.get('server') and raw.get('tool') else None
-                if mcp and isinstance(mcp.get('arguments'), dict):        # ...use_tool's as the tool it ran (agenttools.as_called)
-                    from .agenttools import as_called
-                    tool, a = as_called(mcp['server'], mcp['tool'], mcp['arguments']); mcp = {**mcp, 'tool': tool, 'arguments': a}
-                s = by[u.get('toolCallId')] = {'k': 'tool', 'id': str(u.get('toolCallId') or ''), 'at': at,
-                                               'args': dict(mcp['arguments']) if mcp and isinstance(mcp.get('arguments'), dict) else {},
-                                               'name': f"mcp__{mcp['server']}__{mcp['tool']}" if mcp else _meta(u, 'taskuary', 'tool') or
-                                               _meta(u, 'claudeCode', 'toolName') or _ACP_TOOL.get(u.get('kind')) or u.get('title') or u.get('kind') or 'tool'}
+                s = by[u.get('toolCallId')] = {'k': 'tool', 'id': str(u.get('toolCallId') or ''), 'at': at, 'args': {},
+                                               'name': _meta(u, 'taskuary', 'tool') or _meta(u, 'claudeCode', 'toolName') or _ACP_TOOL.get(u.get('kind')) or
+                                               u.get('title') or u.get('kind') or 'tool'}
                 out.append(s)
             # ...A PERMISSION ASKED FOR IT is its update too (acp.asked_update): it fills what the call's own updates left out - never what they
             # said (Codex asks with its own kind, the command wrapped) - and the call waits on the answer with the agent's options, until it runs
@@ -472,8 +485,9 @@ def acp_steps(updates: list) -> list:
             if (ls := [str(l['path']) for l in u.get('locations') or [] if isinstance(l, dict) and l.get('path')]): s['paths'] = ls[:8]
             if (par := _meta(u, 'claudeCode', 'parentToolUseId') or _meta(u, 'parentToolUseId') or _meta(u, 'parentToolCallId')): s['parent'] = str(par)
             # ...a command as the words it was run with too (codex-acp's ["powershell.exe", "-Command", "..."]): dropped, the row read "Ran a command"
-            if isinstance(u.get('rawInput'), dict): s['args'].update({k: v for k, v in u['rawInput'].items() if k in _ARGS and (isinstance(v, str) and v.strip()
-                                                                      or k == 'command' and isinstance(v, list) and v and all(isinstance(x, str) for x in v))})
+            if (c := _served(u)): s['name'] = c[0]; s['args'].update(c[1])
+            elif isinstance(u.get('rawInput'), dict): s['args'].update({k: v for k, v in u['rawInput'].items() if k in _ARGS and (isinstance(v, str) and v.strip()
+                                                                        or k == 'command' and isinstance(v, list) and v and all(isinstance(x, str) for x in v))})
             if u.get('status'): s['status'] = u['status']
             if (d := _meta(u, 'terminal_output_delta', 'data')): s['out'] = s.get('out', '') + d
             elif not s.get('out') and u.get('status') in ('completed', 'failed') and (o := _out(u)): s['output'] = o

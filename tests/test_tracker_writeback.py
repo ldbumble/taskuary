@@ -215,6 +215,19 @@ class JiraCloseOut(unittest.TestCase):
             st = trackers.assess(self.s, {'tracker': 'jira', 'item': 'NW-12'})
         self.assertEqual((st['ok'], st['state']), (False, 'unknown')); self.assertIn('could not be read', st['reason'])
 
+    def test_an_answer_of_a_shape_nobody_expected_is_said_as_that_never_as_pythons_own_error(self):
+        """Walk 25, 2026-11-26: a merge card read "GitHub could not be read just now (list indices must be integers or slices, not str)". What
+        the service said is his to read; an answer Taskuary could not take apart is said as that - on a tracker's card and GitHub's alike."""
+        from taskuary import say
+        def odd(*a, **k): return [][''.join(())]                           # ...a list where a dict was read
+        with upstream(jira=odd):
+            st = trackers.assess(self.s, {'tracker': 'jira', 'item': 'NW-12'})
+        self.assertEqual((st['ok'], st['state']), (False, 'unknown'))
+        self.assertEqual(st['reason'], 'Jira could not be read just now (its answer was not one Taskuary could read) - open the card again in a moment')
+        self.assertNotIn('indices', say.unread('GitHub', TypeError('list indices must be integers or slices, not str')))
+        self.assertEqual(say.unread('GitHub', RuntimeError('GitHub said 404 Not Found for northwind/ledger')),
+                         'GitHub could not be read just now (GitHub said 404 Not Found for northwind/ledger) - open the card again in a moment')
+
     def test_the_card_reads_the_tracker_through_the_closeout_endpoint(self):
         with upstream(jira=FakeJira()):
             finish(self.s, self.tid)

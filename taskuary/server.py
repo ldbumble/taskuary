@@ -5693,7 +5693,10 @@ def closeout_state(rid: int):
     if p.get('action') != 'merge_pr': return {'state': 'open', 'ok': True, 'reason': '', 'note': '', 'offers': []}
     try: seen = ghcloseout.assess(store, p['repo'], int(p['number']))
     # FAIL CLOSED: an unreadable GitHub was drawn as a live Close out, and a token that could not see the repo merged into a 404
-    except Exception as e: return {'state': 'unknown', 'ok': False, 'reason': f'GitHub could not be read just now ({str(e)[:160]}) - open the card again in a moment', 'note': '', 'offers': []}
+    except Exception as e:
+        from . import say
+        logger.warning(f'close-out rv{rid}: GitHub was not read - {e!r}')
+        return {'state': 'unknown', 'ok': False, 'reason': say.unread('GitHub', e), 'note': '', 'offers': []}
     return {k: v for k, v in seen.items() if k != 'pr'}
 
 @app.post('/api/reviews/{rid}/closeout/{act}')

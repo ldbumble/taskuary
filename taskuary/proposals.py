@@ -321,6 +321,21 @@ def asks_card(question, qs) -> tuple:
 def asks_waiting(store, tid) -> list:
     "The questions cards of task `tid` that wait for his answers."
     return [r for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending' ORDER BY ReviewId", (int(tid),)) if _action(r) == ASKS]
+# ...AND HIS LINE IN THE BOX UNDER IT IS HIS ANSWER (locked rule 4): typed instead of pressed, it greyed the card as one the chat moved past.
+# Settled answered where it stood, each question by its number in his line (workerstate.split_answers), and told as the agent's own wake
+# (general.TOLD): his line is the one way its agent hears the answer
+BY_LINE = 'answered by his line'
+def by_line(store, tid, text: str, actor: str = 'owner') -> list:
+    "Settle each questions card task `tid` waits on with his line `text`: the review ids."
+    from .general import TOLD
+    from .workerstate import split_answers
+    out = []
+    for r in asks_waiting(store, tid):
+        qs = asks_of(_draft(r)); got = split_answers(text, [{'request_id': i} for i in range(len(qs))])
+        res = {'answers': [{'question': q['question'], 'answer': got[i][:2000]} for i, q in enumerate(qs)], 'by_line': True}
+        store.audit('review', r['ReviewId'], TOLD, 'taskuary', 'system', {'by': BY_LINE})
+        if store.decide_review(r['ReviewId'], 'approved', receipt(r, None, res), actor, note=BY_LINE): out.append(r['ReviewId'])
+    return out
 def answers_of(p: dict, fields: dict = None) -> list:
     "His answer to each question of the card, in its order - '' where he left one empty."
     got = (fields or {}).get('answers') if isinstance(fields, dict) else None
@@ -329,6 +344,7 @@ def answers_of(p: dict, fields: dict = None) -> list:
 def answered(result) -> str:
     "What he answered, a line a question - as its agent is told it and its card keeps it (the receipt's result)."
     rows = (result or {}).get('answers') if isinstance(result, dict) else None
+    if rows and result.get('by_line'): return 'answered by his line in the chat'
     return '\n'.join(f"{i}. {a.get('question')} - {a.get('answer') or '(left empty)'}" for i, a in enumerate(rows or [], 1) if isinstance(a, dict))
 
 
@@ -970,7 +986,7 @@ def bears(store, r: dict, m: dict | None, at: float = 0.) -> bool:
     on a card written on its own thread. Structure, never meaning."""
     if m is None:
         from .workerstate import answering
-        return not (r.get('TaskId') and answering(store, int(r['TaskId']), at))
+        return _action(r) != ASKS and not (r.get('TaskId') and answering(store, int(r['TaskId']), at))     # ...a questions card he answers (by_line)
     from .context import _recipients
     from .continuity import addressees, answers
     who = {a.lower() for a in _recipients(m)} if m.get('Own') else {str(m.get('FromEmail') or '').lower()} - {''}

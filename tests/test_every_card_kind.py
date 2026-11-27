@@ -350,6 +350,24 @@ def test_several_questions_are_one_card_nothing_is_raised_under_it_and_one_press
     assert not cardqueue.asking(w.s, w.tid) and not _tool(w, 'propose', kind='post', network='x', text='Harbor Bakery opens Saturday.')[1]
 
 
+def test_his_line_in_the_box_answers_the_questions_card_and_never_greys_it(w):
+    """A line he typed under the 2-6 question card greyed it as one the chat moved past, though it was his answer. His typed line answers it
+    (locked rule 4): settled answered where it stood, each question by its number in his line, and nobody is woken by the card - his line is
+    how its agent hears the answer, once."""
+    from taskuary import events
+    _tool(w, 'ask_owner', questions=ASKED)
+    [rv] = proposals.asks_waiting(w.s, w.tid); rid = rv['ReviewId']
+    _line(w, '1. Locals and visitors\n2. One page\n3. Warm')
+    r = w.s.get_review(rid)
+    assert r['Status'] == 'approved' and w.cards()[rid]['status'] == 'approved', (r['Status'], r['DecideNote'])
+    assert [a['answer'] for a in json.loads(r['FinalText'])['result']['answers']] == ['Locals and visitors', 'One page', 'Warm']
+    assert not w.woken and not cardqueue.asking(w.s, w.tid)
+    told = events.render(events.pending(w.s, w.tid), fresh=True)
+    assert told.count('Locals and visitors') == 1 and 'answered by his line' in told, told
+    out = c.post(f'/api/reviews/{rid}/decide', headers=OWNER, json={'verb': 'approve', 'fields': {'answers': ['x', 'y', 'z']}}).json()
+    assert not out.get('ok') and not w.woken, 'a press after his line changes nothing'
+
+
 def test_questions_the_agent_takes_back_or_gives_wrongly_leave_nothing_standing(w):
     for bad in ([{'question': 'Only one?'}, {'choices': ['a']}], [{'question': f'Question {i}?'} for i in range(7)]):
         said, err = _tool(w, 'ask_owner', questions=bad)
@@ -439,6 +457,8 @@ def test_his_answer_to_the_agents_own_question_greys_no_card_of_any_kind(w, kind
     rids = _waiting(w, kind)
     ws.record(w.s, w.tid, 'run1', 'input_needed', text='Two posts are up on X - keep both?', choices=['Keep both', 'Remove the first'], source='api')
     _line(w, 'Keep both')
+    if kind == proposals.ASKS:      # ...a questions card is itself the agent's question: his line answers it, never greys it
+        r = w.s.get_review(rids[0]); assert r['DecideNote'] == proposals.BY_LINE and not proposals.passed(r); return
     assert all(w.s.get_review(r)['Status'] == 'pending' for r in rids), 'his answer to the question greyed a card that waits'
     assert proposals.written_past(w.s, w.tid) == set() and w.cards()[rids[0]]['status'] == 'pending'
     assert 'Waiting for his press now' in cardqueue.screen(w.s, w.tid) and 'Greyed' not in cardqueue.screen(w.s, w.tid)
@@ -473,6 +493,8 @@ def test_a_card_his_line_greyed_stays_greyed_and_stands_again_only_by_its_agents
     rids = _waiting(w, kind)
     assert w.cards()[rids[0]]['status'] == 'pending'
     _line(w, 'The post box on the page is empty.')
+    if kind == proposals.ASKS:      # ...the agent's questions card is answered by his line, never greyed (locked rule 4)
+        r = w.s.get_review(rids[0]); assert r['Status'] == 'approved' and r['DecideNote'] == proposals.BY_LINE; return
     assert all(proposals.passed(w.s.get_review(r)) for r in rids), 'his line greys what waited, the second he types'
     assert 'stands again under his newest line only where you keep it' in cardqueue.screen(w.s, w.tid), cardqueue.screen(w.s, w.tid)
     ws.record(w.s, w.tid, 'run1', 'turn_end', text='That is fixed.', source='api')

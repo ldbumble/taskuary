@@ -354,7 +354,8 @@ def line_answers(store, tid: int, text: str, actor: str = 'owner') -> list:
     rs = [r for r in (status(store, tid)['requests'] if sid else []) if own_question(r) and r.get('ask') == 'question' and str(r['sid']) == str(sid)]
     words = ' '.join(str(text or '').split())[:500]
     for r in rs: record(store, tid, sid, 'answered', request_id=r['request_id'], text=words, source=said_by(actor))
-    return [r['request_id'] for r in rs]
+    from .proposals import by_line                     # ...and its questions card, the same answer (locked rule 4)
+    return [r['request_id'] for r in rs] + [f'rv{x}' for x in by_line(store, tid, text, actor)]
 
 
 def answering(store, tid: int, at: float) -> bool:

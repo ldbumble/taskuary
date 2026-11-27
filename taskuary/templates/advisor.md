@@ -16,3 +16,5 @@ one or two parts of the work read in turn.
 - credit: work the owner did that leadership likely does not see.
 - early_warning: a problem developing - a drift, a job that will fail again, a deadline at risk, a report that stopped arriving.
 - leverage: who depends on the owner, who to loop in, an introduction that would unblock something.
+
+About a person it sees only the pattern: counts, dates, what changed.

@@ -812,3 +812,15 @@ def test_the_look_may_ask_the_mailbox_itself_read_only(monkeypatch):
     text = lookout.read(s, rd('mailbox', name=VENDOR, sent=True, days=60), seen, counts)
     assert 'Old contract terms' in text and 'cite it as mailbox' in text and 'Please countersign' in seen['mailbox']
     assert lookout.read(s, rd('mailbox'), seen, counts).startswith('mailbox: say whose mail')
+
+
+def test_an_idea_about_a_person_stands_on_counts_or_dates_never_on_a_line_read_for_what_it_may_mean():
+    """The real-model check, 2026-11-27: ADVISOR.md no longer said that about a person it sees only the pattern. The model says which idea is
+    about someone (about_person); one whose quotes hold no number or date and claims no count is dropped - no word list reads the words."""
+    s, ids = world()
+    seen = {'msg900': 'Sorry for the slow reply - out again tomorrow, family thing. 3 replies late since 2026-11-02.'}
+    by = lambda quote, who='Ray Colton': lookout.verify(s, idea('early_warning', 'Ray is behind on the GL mapping', ['msg900'],
+                                                                 quotes=[{'ref': 'msg900', 'quote': quote}]) | {'about_person': who}, seen, {}, lookout.families(s))
+    assert by('out again tomorrow, family thing') == (None, 'it is about a person and rests on no count or date')
+    assert by('3 replies late since 2026-11-02')[0]['refs'] == ['msg900']
+    assert by('out again tomorrow, family thing', who=None)[0], 'an idea about no one is checked as before'

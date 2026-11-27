@@ -403,10 +403,7 @@ def say_relayed(session, owner, relay, **kw):
     session.store.add_comment(session.task_id, 'owner', USER_TYPE, ' '.join(str(owner).split()))
     session.store.add_comment(session.task_id, BRIEF_ACTOR, USER_TYPE, f'{RELAY} {extra}')
     return session.send_prompt(relay_turn(owner, relay), kept=True, brief=True, **kw)
-# ``assistant`` was briefly written by Timeline discussions before those tasks were normalized
-# to ``general``. Keep it as a read-compatible alias so existing discussions still open in the
-# Assistant workspace without a data migration.
-GENERAL_KINDS = {'general', 'research', 'marketing', 'triage', 'assistant'}
+GENERAL_KINDS = {'general'}      # the retired kinds (research, marketing, triage, assistant) are healed to it at start (store.py)
 DOCK_TAG = 'assistant:dock'
 SETUP_REF = 'assistant:setup'          # a walkthrough opened from the Assistant (concierge.setup_task)
 SETUP_SKILL = Path(__file__).parent / 'skills' / 'taskuary-setup' / 'SKILL.md'

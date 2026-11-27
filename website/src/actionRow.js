@@ -367,7 +367,7 @@ export const TYPES = [["move", ""], ["change", "Change"]];
 export const NAV = "Nav";                 // the pill Back and Next share, labelled like the types
 const TYPE_OF = {
   reply: "reply", approve: "reply", send_close: "reply", redraft: "reply", palt: "reply", reject: "reply", email: "reply", hand: "reply", attach: "reply", "email-file": "reply", copy: "reply",
-  "start-agent": "agent", "run-another": "agent", "strong-again": "agent", continue: "agent", "send-general": "agent", diff: "agent",
+  "start-agent": "agent", "run-another": "agent", continue: "agent", "send-general": "agent", diff: "agent",
   done: "close", "close-note": "close", reopen: "close",
   remind: "task", watch: "task", nat: "task", reshape: "task",
   // what the task's pills used to change (section 1's redesign, 2026-10-16): the pills read now, the row changes
@@ -552,7 +552,7 @@ export function splitRow(row, on, desk = false) {
 export const TASK_GROUPS = [
   ["finish", "Finish", ["closed-result", "done", "reopen", "close-note", "send_close", "approve", "elsewhere"]],
   ["later", "Pass on", ["hand", "remind", "nat", "watch", "defer", "let_go", "not_ours", "not_ours_sender", "not_ours_kind", "block_sender"]],
-  ["agent", "Agent", ["run-another", "send-general", "start-agent", "continue", "strong-again", "rerun", "diff", "attach", "email-file", "prepare",
+  ["agent", "Agent", ["run-another", "send-general", "start-agent", "continue", "rerun", "diff", "attach", "email-file", "prepare",
     "reply", "redraft", "palt", "reject", "chase", "email", "copy", "accept_invite", "decline_invite", "propose_time", "find_time"]],
   ["more", "More", ["share", "change"]],
 ];

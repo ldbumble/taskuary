@@ -42,7 +42,7 @@ def previous_work(store, limit=5):
         if tid in general.OPENING or (session and (getattr(session, 'mode', '') != 'assistant' or session.busy)): continue
         review = reviews.get(tid)
         if row['Status'] == 'done' and not review: continue
-        recap = re.sub(r'^(HANDOVER NOTE|AGENT REPORT|CODER REPORT)\s*', '', row.get('Recap') or '').strip()
+        recap = re.sub(r'^(HANDOVER NOTE|AGENT REPORT)\s*', '', row.get('Recap') or '').strip()
         recap = recap or 'A saved session is available. Continue from its existing work and handover.'
         result.append({'taskId': tid, 'title': row['Title'], 'recap': recap[:600],
                        'lastWorkedAt': row['LastWorkedAt'], 'action': 'review' if review else 'resume',
@@ -62,15 +62,6 @@ RESUME_PROMPT = (
     'All of that is for you: tell the owner only what is done, what you are doing and what you need from them - never that something '
     'was absent (nothing saved, nothing pending, nothing awaiting approval).'
 )
-# RUN AGAIN ON THE STRONG MODEL picks up from the saved work, as Resume does - an agent that can act may have done half of it, so a
-# blank start could do it twice - but it is not a Resume press: the agent was told "the owner chose Resume" and the hover said "from
-# a fresh start", and neither was what happened (2026-10-26)
-STRONG_AGAIN_PROMPT = (
-    'The owner chose Run again on the strong model for this task: the last run failed or was unsure, and you are now on a stronger '
-    'model. Use the saved conversation and handover to see what was tried and what is already done, and say so briefly. Verify the '
-    'current state before repeating any action, then carry the work through. Do not treat this press as approval to send, publish, '
-    'or execute a pending action. If the result is ready, point the owner to it for review.'
-)
 
 
 # ── what came in after the agent's last turn ─────────────────────────────────────────────────────────────────────────
@@ -83,7 +74,7 @@ STRONG_AGAIN_PROMPT = (
 def last_agent_turn(store, tid) -> str:
     """When the agent last spoke on this task: its newest reply or report, or the saved conversation's own stamp."""
     said = [c['CreatedAt'] for c in store.list_comments(tid, internal=True) if c.get('CreatedAt') and (c.get('ActorType') == 'assistant_agent'
-            or str(c.get('Body') or '').startswith(('AGENT REPORT', 'CODER REPORT', 'HANDOVER NOTE')))]
+            or str(c.get('Body') or '').startswith(('AGENT REPORT', 'HANDOVER NOTE')))]
     saved = (store.saved_session(tid) or {}).get('UpdatedAt')
     return max([s for s in [*said, saved] if s] or [''])
 

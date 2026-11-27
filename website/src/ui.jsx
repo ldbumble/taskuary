@@ -726,8 +726,8 @@ export const AgentReport = ({ body, artifacts: all = [] }) => {
   // ...and what it MADE: pages it published, files a chat showed (the owner, 2026-10-09: "agent work ... should reflect what it
   // did. simple task and any related artifacts it creates. replies, actions should be on the close out tab")
   const pages = all.filter((a) => isPublished(a) || a.kind === "shown");
-  // the session's last message rides at the END of the report (the agent's finish: AGENT REPORT ... LAST MESSAGE ...; CODER REPORT on older rows)
-  const [report, last] = String(body || "").replace(/^((?:AGENT|CODER) REPORT|HANDOVER NOTE)\n?/, "").trim().split(/\n+LAST MESSAGE\n/);
+  // the session's last message rides at the END of the report (the agent's finish: AGENT REPORT ... LAST MESSAGE ...)
+  const [report, last] = String(body || "").replace(/^(AGENT REPORT|HANDOVER NOTE)\n?/, "").trim().split(/\n+LAST MESSAGE\n/);
   const lead = (/^Summary:[ \t]*([\s\S]*?)(?=^(?:Triage|Determination|Actions|Found|Did|Next):|(?![\s\S]))/m.exec(report)?.[1] ?? report).trim();
   const [said, setSaid] = useState(answer?.url ? null : "");
   useEffect(() => {

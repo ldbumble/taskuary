@@ -145,7 +145,7 @@ class DeskRoutes(unittest.TestCase):
         self.assertTrue(it.get('closed'))
         verbs = {b['verb'] for b in concierge.row_buttons(s, it)}
         self.assertIn('reopen', verbs)
-        self.assertFalse(verbs & {'close', 'close_note', 'remove', 'defer', 'strong_again'}, verbs)
+        self.assertFalse(verbs & {'close', 'close_note', 'remove', 'defer'}, verbs)
         closeouts = lambda: [c for c in s.list_comments(tid) if str(c.get('Body') or '').startswith('Closed out')]
         n = len(closeouts())
         out, _ = say(s, 'close it, the bank sorted it', f'task:{tid}', 'CALL: {"kind": "task.complete", "params": {"note": "the bank sorted it"}}')
@@ -162,7 +162,7 @@ class DeskRoutes(unittest.TestCase):
 
     def test_any_row_button_named_by_its_own_label_lights(self):
         """The 2026-10-26 sweep: button.light {button: 'Remind me'} missed with "has no remind me button - its row has ..., Remind me",
-        "Share" lit Email a summary's absence, and "Run again on the strong model" lit nothing or another button."""
+        "Share" lit Email a summary's absence."""
         s = store(); tid, item = on_table(s)
         it = funnel.item_for_key(s, f'task:{tid}')
         for b in concierge.row_buttons(s, it):
@@ -175,11 +175,6 @@ class DeskRoutes(unittest.TestCase):
             self.assertEqual(concierge._button_named(s, it, 'Share'), 'share_result', "the row's Share, not Email a summary")
         out, _ = say(s, 'remind me about this', item['key'], 'CALL: {"kind": "button.light", "params": {"button": "Remind me"}}')
         self.assertEqual(out['light']['verb'], 'defer')
-        # ...and the strong re-run, on a task whose reader was unsure (the ▾ draws it then), by its label - lit, nothing runs
-        s.judge_task(tid, {'sure': False}, 'owner')
-        out, _ = say(s, 'use the strong model for this', item['key'],
-                     'CALL: {"kind": "button.light", "params": {"button": "Run again on the strong model"}}')
-        self.assertEqual(out['light']['verb'], 'strong_again')
 
     def test_a_digit_over_a_task_view_presses_nothing_it_does_not_show(self):
         """The 2026-10-26 sweep: "2" over TQ-1141 was rewritten to its chips' second, Mark done - but a task is drawn as its own view,

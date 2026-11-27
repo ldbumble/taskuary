@@ -2399,8 +2399,8 @@ def more_text(store, item: dict | None, limit: int = None) -> str:
     if item.get('kind') == 'agentdone' and item.get('tid'):
         # what the agent FOUND, in full - the card's line is its summary, and it asks "want to see the final report?"
         rep = next((c['Body'] for c in reversed(store.list_comments(int(item['tid'])) or [])
-                    if str(c.get('Body') or '').startswith(('AGENT REPORT', 'CODER REPORT', 'The agent closed this itself'))), '')
-        return rep.split('\n', 1)[-1].strip() if rep.startswith(('AGENT REPORT', 'CODER REPORT')) else rep
+                    if str(c.get('Body') or '').startswith(('AGENT REPORT', 'The agent closed this itself'))), '')
+        return rep.split('\n', 1)[-1].strip() if rep.startswith('AGENT REPORT') else rep
     msg, body, is_report = _body(store, item)
     if not body: return ''
     if is_report:
@@ -2599,7 +2599,7 @@ def agent_report(store, tid) -> dict:
     """The report an agent files (wrapup.py): Summary = what it found, Actions = what it did, Determination = its verdict."""
     if store is None or not tid: return {}
     try: rep = next((str(c.get('Body') or '') for c in reversed(store.list_comments(int(tid)) or [])
-                     if str(c.get('Body') or '').startswith(('AGENT REPORT', 'CODER REPORT', 'HANDOVER NOTE'))), '')
+                     if str(c.get('Body') or '').startswith(('AGENT REPORT', 'HANDOVER NOTE'))), '')
     except Exception as e:
         logger.debug(f'the phone could not read the agent report: {e}')
         return {}

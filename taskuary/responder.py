@@ -694,7 +694,7 @@ def resolution_of(store, task_id: int):
 
     Prefer the exact final agent response saved in the long-form artifact. Older sessions do not
     have that section, so their filed transcript is the fallback; only legacy records with neither
-    retain the compact AGENT REPORT (CODER REPORT on older rows). This is also what makes Review -> Redraft lossless.
+    retain the compact AGENT REPORT. This is also what makes Review -> Redraft lossless.
     """
     from .selfclose import DONE_SAID
     notes = list(reversed(store.list_comments(task_id)))

@@ -521,7 +521,7 @@ class TerminalTests(unittest.TestCase):
         server.store.update_task(tid, {'Status': 'waiting'}, 'test')
         opened = {'sid': 'continued-session', 'alive': True, 'agent': 'codex-continuation'}
         with mock.patch.object(terminal, 'start_on_task', return_value=opened) as start:
-            out = c.post(f'/api/tasks/{tid}/continue', json={'instruction': 'implement the mapper and tests'}).json()
+            out = server.continue_task(tid, server.CodeBody(instruction='implement the mapper and tests'))   # continue-work's fresh road
         self.assertEqual((out['agent'], out['fromSession'], out['session']['sid']),
                          ('codex-continuation', 'old-session', 'continued-session'))
         self.assertEqual(start.call_args.args[:5],
@@ -539,8 +539,7 @@ class TerminalTests(unittest.TestCase):
         server.store.add_transcript(tid, 'old-session', 'rate limited', 'old-agent', os.getcwd())
         opened = {'sid': 'backup-session', 'alive': True, 'agent': 'backup-agent'}
         with mock.patch.object(terminal, 'start_on_task', return_value=opened) as start:
-            out = c.post(f'/api/tasks/{tid}/continue',
-                         json={'agent': 'backup-agent', 'instruction': 'pick up from the failed run'}).json()
+            out = server.continue_task(tid, server.CodeBody(agent='backup-agent', instruction='pick up from the failed run'))
         self.assertEqual(out['agent'], 'backup-agent')
         self.assertEqual(start.call_args.args[2], 'backup-agent')
 
@@ -584,9 +583,9 @@ class TerminalTests(unittest.TestCase):
     def test_continue_does_not_silently_replace_a_removed_profile(self):
         tid = c.post('/api/tasks', json={'Title': 'continue it', 'Kind': 'coding'}).json()['taskId']
         server.store.add_transcript(tid, 'gone-session', 'work', 'removed-agent', os.getcwd())
-        r = c.post(f'/api/tasks/{tid}/continue', json={'instruction': 'make the changes'})
-        self.assertEqual(r.status_code, 422)
-        self.assertIn('removed-agent', r.json()['detail'])
+        with self.assertRaises(server.HTTPException) as r: server.continue_task(tid, server.CodeBody(instruction='make the changes'))
+        self.assertEqual(r.exception.status_code, 422)
+        self.assertIn('removed-agent', r.exception.detail)
 
     def test_an_image_pasted_into_a_task_terminal_is_saved_for_its_prompt(self):
         tid = c.post('/api/tasks', json={'Title': 'inspect this screenshot', 'Kind': 'coding'}).json()['taskId']

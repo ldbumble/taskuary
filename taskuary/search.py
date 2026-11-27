@@ -482,7 +482,7 @@ def outcomes(store, words, skip=None, limit: int = N_OUTCOMES, loose: bool = Fal
     need = min(2, len(ws)) if loose else len(ws)
     hay = "lower(IFNULL(t.Title,'') || ' ' || IFNULL(t.Summary,'') || ' ' || IFNULL(c.Body,''))"
     rows = store._rows(f"SELECT c.CommentId, c.TaskId, c.ActorType, c.Body, c.CreatedAt, t.Title, t.Summary, t.Status, t.ClosedAt FROM comment c "
-                       f"JOIN task t ON t.TaskId=c.TaskId WHERE (c.ActorType=? OR c.Body LIKE 'AGENT REPORT%' OR c.Body LIKE 'CODER REPORT%') "
+                       f"JOIN task t ON t.TaskId=c.TaskId WHERE (c.ActorType=? OR c.Body LIKE 'AGENT REPORT%') "
                        f"AND t.Status<>'dropped' AND c.TaskId<>? AND ({' OR '.join(f'{hay} LIKE ?' for _ in ws)}) ORDER BY c.CommentId DESC LIMIT 400",
                        (SUMMARY_TYPE, int(skip or 0), *[f'%{w}%' for w in ws]))
     best = {}

@@ -313,7 +313,7 @@ export const tabW = (w) => (w > 0 ? Math.round(Math.min(TAB_W, Math.max(TAB_MIN,
 // ...a press on the reply's, the close's or the agent's own move opens the chat it is in (a draft's own are "<review>:<verb>"); Came from's act
 // where they stand
 const CHAT_VERBS = new Set(["reply", "done", "close-note", "hand", "accept_invite", "decline_invite", "propose_time", "find_time",
-  "continue", "run-another", "send-general", "start-agent", "diff", "fix", "strong-again"]);
+  "diff", "fix"]);
 const MINI_TAB = (here) => ({ appearance: "none", font: "inherit", cursor: "pointer", position: "absolute", top: 0, left: 0, bottom: 0, width: MINI_W,
   border: 0, bgcolor: "var(--tq-panel, #fff)", color: INK, display: "flex", flexDirection: "column", alignItems: "center", gap: 1.25, py: 1.5, px: 0, boxSizing: "border-box",
   "& [data-tq-tab-arrow]": { width: 26, height: 26, borderRadius: 99, display: "grid", placeItems: "center", flexShrink: 0, fontSize: 15, lineHeight: 1,

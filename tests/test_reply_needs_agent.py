@@ -365,10 +365,10 @@ def test_a_reply_owed_on_a_coding_task_nothing_ran_on_starts_its_coding_agent():
 
 
 def test_the_hand_over_keeps_a_general_kind_and_holds_the_start_against_a_second_one():
-    s = store(); tid = general_ask(s, kind='research')
+    s = store(); tid = general_ask(s, kind='general')
     try:
         _rv, spawned, went = handed(s, tid)
-        assert went and spawned == ['_auto_general'] and s.get_task(tid)['Kind'] == 'research'
+        assert went and spawned == ['_auto_general'] and s.get_task(tid)['Kind'] == 'general'
         assert tid in general.OPENING                     # opening from the hand-over on: a second one meanwhile is an agent live on it
         assert handed(s, tid)[1:] == ([], False)
     finally: general.OPENING.discard(tid)

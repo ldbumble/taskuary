@@ -59,13 +59,11 @@ def report_from_transcript(store, task_id: int, transcript: str, agent: str = ''
                         f'No summary could be written ({str(e)[:120]}) - the session transcript is kept with the task.'}
 
 
-# The note a finished session files. It was named for one special profile, and no profile is special (the owner, 2026-10-15);
-# databases still hold the old marker, so every reader takes both.
+# The note a finished session files (its old 'CODER REPORT' marker is healed at start, store.py)
 REPORT = 'AGENT REPORT'
-REPORTS = (REPORT, 'CODER REPORT')
-REPORT_RE = re.compile(r'^(?:AGENT|CODER) REPORT')
-def is_report(body) -> bool: return str(body or '').startswith(REPORTS)
-def report_body(body) -> str: return REPORT_RE.sub('', str(body or ''), count=1).strip()
+REPORTS = (REPORT,)
+def is_report(body) -> bool: return str(body or '').startswith(REPORT)
+def report_body(body) -> str: return str(body or '').removeprefix(REPORT).strip()
 
 PAUSE_MARKER = 'HANDOVER NOTE'
 PAUSE_SYSTEM = (

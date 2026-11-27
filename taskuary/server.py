@@ -388,8 +388,8 @@ async def owner_presence(request: Request, call_next):
 # ANY MOVE ENDS A WATCH (watch.py, the owner, 2026-11-01: "un-watch it by opening it and pressing any move"): a press on the task's own
 # moves, its draft's or its mail's reply - never a read, a note, a picture for the agent or Watch it itself. Mark done ends it by closing.
 # ...and a line he types to its agent ends it on the line's own road (general.take_line), before the turn it waits on
-WATCH_ENDS = re.compile(r'^/api/(?:tasks/(?P<tid>\d+)(?:/(?:remind|dispatch|code|continue|continue-session|continue-work|resume|not-coding|'
-                        r'not-a-task|split|merge|handoff|emails|offer|clarify|answer|wrap|repo|strong-again|agent/stop|pause))?'
+WATCH_ENDS = re.compile(r'^/api/(?:tasks/(?P<tid>\d+)(?:/(?:remind|dispatch|code|continue-work|resume|not-coding|'
+                        r'not-a-task|split|merge|handoff|emails|offer|clarify|answer|wrap|repo|agent/stop|pause))?'
                         r'|reviews/(?P<rid>\d+)/(?:decide|closeout/[a-z_]+|draft)|messages/(?P<mid>\d+)/(?:reply|calendar|dispatch))$')
 
 def _end_watch(m) -> None:
@@ -2499,9 +2499,6 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False, whole: bool 
     session = hub_term.for_task(task_id, tail=3, details=False)
     judged, ran, story = _brainroute().judged(store, task_id), _workerstate().ended(store, task_id), _agent_story(task_id)
     left = _workerstate().left_asking(store, task_id) if ran else []         # what a run that is over was still asking the owner
-    # "Run again on the strong model" is offered only on an open task whose agent failed or whose reader was unsure (TaskPage's
-    # ▾): asking the router on every other open cost ~11 ms a task, 2.7x what an open cost in 0.3.9.34 (2026-10-26)
-    strong = _brainroute().strong_offered(d['task'], judged, ran, story)
     # ...each reader handed the messages already read, and every verdict in one read: on a 1,500-line chat each asked again, line by
     # line, and the page drew a spinner over an empty frame while it did (the owner, 2026-11-01: "this still happens")
     msgs, verdicts = full, store.task_verdicts(task_id)
@@ -2576,8 +2573,6 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False, whole: bool 
             'routeWhy': _brainroute().why_for_task(store, task_id),
             # ...and how hard its work is, how sure its reader was, what data it carries - triage's word or the owner's (brainroute.judged)
             'judged': judged,
-            # ...and whether a re-run on a strong model is there to offer (the ▾'s "Run again on the strong model"), and on which brain
-            'strongAgain': (lambda j: {'pick': j[1], 'brain': _brainroute()._said(store, j[1]), 'model': j[2]} if j[1] else None)(_strong_again_of(d['task']) if strong else ('', '', '')),
             # ...and what the agent step says when nothing is live: why it never started, or what it did before it went
             'agentStory': story,
             # ...and whether it works in a checkout: the header's Changes and the chat's landing card show then only, any kind (landing.has_checkout)
@@ -3258,7 +3253,6 @@ def code(task_id: int, background: BackgroundTasks, body: CodeBody = None):
                         brain=getattr(body, 'brain', None))
     return {'start': 'session', 'agent': agent, 'model': (body.model if body else None), 'session': ses}
 
-@app.post('/api/tasks/{task_id}/continue')
 def continue_task(task_id: int, body: CodeBody):
     """Continue completed coding work without pretending a dead PTY is still alive.
 
@@ -3300,11 +3294,10 @@ def _after_writeup(tid: int, timeout: float = 90) -> None:
     if writeup.running(tid) and not writeup.in_job(): writeup.wait_for(tid, timeout=timeout)
 
 
-@app.post('/api/tasks/{task_id}/continue-session')
 def continue_session(task_id: int, body: CodeBody = None):
     """Reopen the agent's OWN conversation, by the id its CLI gave it.
 
-    Not /continue, which starts a FRESH pane seeded with the handover note - a new agent reading
+    Not continue_task, which starts a FRESH pane seeded with the handover note - a new agent reading
     about what the last one did. Here the CLI still holds what it read, changed and asked, so the
     prompt is only 'carry on'. The session id is the assistant's trick (session_resume) applied to
     a pty: filed when a hook or a rollout names it, so a restart cannot take it away.
@@ -12876,50 +12869,6 @@ def correct_judged(task_id: int, body: JudgedBody, background: BackgroundTasks =
             _teach_line(task_id, k, f'"{title}" - the owner says ' + (f'the work is {x}' if k == 'difficulty' else f'its data is {x}'), background)
     store.audit('task', task_id, 'judged', ACTOR, detail=v)
     return {'judged': _brainroute().judged(store, task_id)}
-
-
-def _strong_again_of(task: dict) -> tuple:
-    """(job, pick, model) a re-run on the strong model would use for this task - its last brain first - or ('', '', '')."""
-    from . import config as _c
-    with _c.once(): return _strong_again_read(task)
-
-
-def _strong_again_read(task: dict) -> tuple:
-    from . import general
-    job = 'general' if general.handles(task) else 'coding'
-    if job == 'general':
-        saved = store.saved_session(task['TaskId']) or {}
-        first = saved.get('Pick') or None
-    else:
-        last = store.last_transcript(task['TaskId']) or {}
-        first = f"cli:{last['Brain']}" if last.get('Brain') else None
-    pick, model = _brainroute().strong_for(store, job, task, first)
-    return (job, pick, model) if pick else ('', '', '')
-
-
-@app.post('/api/tasks/{task_id}/strong-again')
-def strong_again(task_id: int):
-    """RUN AGAIN ON THE STRONG MODEL (the owner, 2026-10-25): an agent that failed, or whose task triage was unsure of, run once
-    more on a strong model, picking up from its saved work. A press, never automatic - an agent that can act may have done half
-    its work, which is also why it picks up rather than starting blank - and nothing it drafts is sent without the owner's Send."""
-    task = store.get_task(task_id)
-    if not task: raise HTTPException(404, 'task not found')
-    if task.get('Status') == 'dropped': raise HTTPException(409, 'This task was dismissed.')
-    job, pick, model = _strong_again_of(task)
-    if not pick: raise HTTPException(422, "No AI here has a strong model - put one in the strong model box on its card in Settings.")
-    from . import brainroute, continuity, general
-    said = f"{brainroute.JOB_WORDS[job]} run again on {brainroute._said(store, pick)}'s strong model, {model}, as you pressed"
-    brainroute.log(store, brainroute.Route(job, 'strong', pick, model, 'strong', [], 'you chose it', said[0].upper() + said[1:]), task_id)
-    store.audit('task', task_id, 'strong-again', ACTOR, detail={'job': job, 'pick': pick, 'model': model})
-    if job == 'general':
-        if task.get('Status') not in ('open', 'waiting', 'in_progress'): store.update_task(task_id, {'Status': 'in_progress'}, ACTOR)
-        def go():
-            try: general.start_session(store, task_id, actor=ACTOR).send_prompt(continuity.STRONG_AGAIN_PROMPT, pick=pick, model=model, as_owner=False)
-            except Exception as e: _walk_cannot(task_id, f'The session could not run again on the strong model: {e}. Your saved conversation is still here.')
-        threading.Thread(target=go, daemon=True, name=f'strong-again-{task_id}').start()
-        return {'started': True, 'taskId': task_id, 'kind': 'general', 'pick': pick, 'model': model}
-    out = continue_task(task_id, CodeBody(brain=pick[4:], model=model, instruction=continuity.STRONG_AGAIN_PROMPT))
-    return {'started': True, 'taskId': task_id, 'kind': 'coding', 'pick': pick, 'model': model, **(out if isinstance(out, dict) else {})}
 
 
 @app.get('/api/ai/defaults')

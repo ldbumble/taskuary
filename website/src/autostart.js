@@ -12,7 +12,7 @@
 //   navigation lost it twice - once to that stale `detail`, once to the effect that cleared it
 //   in the same commit that set it. It rides on the task as a tag instead (newTask.js), and the
 //   chat reads it when it opens.
-export const GENERAL_KINDS = new Set(["general", "research", "marketing", "triage", "assistant"]);
+export const GENERAL_KINDS = new Set(["general"]);   // the retired kinds are healed to it at start (store.py)
 
 export const isGeneralKind = (kind) => GENERAL_KINDS.has(String(kind || "general").toLowerCase());
 

@@ -197,7 +197,7 @@ export function agentLabel(card, name) {
   const chat = ["chat", "assistant"].includes(String(card?.mode || "")) || ["assistant", AGENT_SHOWN.toLowerCase()].includes(p);
   return chat ? AGENT_SHOWN : "Coding agent";
 }
-// the report an agent files (wrapup.py: AGENT REPORT, CODER REPORT on older rows): Summary is what it found, Actions what it did, Determination its verdict -
+// the report an agent files (wrapup.py: AGENT REPORT): Summary is what it found, Actions what it did, Determination its verdict -
 // the evidence the move is decided on, where one sentence ("PR #81 was reviewed and approved") is not enough
 export function readReport(body) {
   const text = String(body || "").replace(/^((?:AGENT|CODER) REPORT|HANDOVER NOTE)\s*/, "").split(/\n\s*LAST MESSAGE\s*\n/)[0];

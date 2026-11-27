@@ -6155,10 +6155,8 @@ def agent_message(mid: str, request: Request, task_id: int):
         if agenttools.unvouched(store, task_id, {'id': n}): raise HTTPException(403, agenttools.UNVOUCHED)
     else:
         _owner_history(request, task_id)
-        raw = store.get_message(n) or {}                                           # ...and never mail in an account of another profile
-        if (mv := hub_ws.move_card(store, task_id, raw.get('SourceName'), f'read message m{n}', raw.get('Channel') or 'email')):
-            raise HTTPException(403, mv['says'])
-    m = mailsearch.message(store, n)
+    try: m = mailsearch.message(store, n, task_id)                                 # ...and never mail in an account of another profile, on its thread too
+    except mailsearch.Walled as e: raise HTTPException(403, str(e))
     if not m: raise HTTPException(404, agenttools.no_message(n))
     return m
 
@@ -9472,7 +9470,7 @@ def tool_run(body: dict, request: Request):
     from .reports import tool_card
     try: int(connector_id or 0)
     except (TypeError, ValueError): raise HTTPException(422, 'connector_id must be a number')
-    try: conn = tool_card(store, t, connector_id)
+    try: conn = tool_card(store, t, connector_id, guard.session_tid(cfg['server'], request.headers))
     except ValueError as e: raise HTTPException(422, str(e))
     # ...a number that is no card is said as that: "no connection card an owner turned on" was untrue of a card standing on
     if connector_id and not conn:

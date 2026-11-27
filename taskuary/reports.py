@@ -1178,14 +1178,17 @@ def _connector(store, typ, connector_id=None, with_secret=False):
     return c if c and c.get('Type') == typ else None
 
 
-def tool_card(store, t: str, connector_id=None):
+def tool_card(store, t: str, connector_id=None, tid=None):
     """THE card an agent's call to tool `t` runs on: the one it names (None when that number is no card), else the one of its type that
     is on and a tool - never the first row, which read one company's books as another's, or refused "not an agent tool" beside the
-    card that is one. With none such, the first of the type, for the refusal that says why; ValueError naming them when several are."""
+    card that is one. With none such, the first of the type, for the refusal that says why; ValueError naming them when several are.
+    `tid`: the task whose agent calls - of several, the ones its task may use (workstreams.may_use): a card for each profile is no choice."""
     from .store import roles_of
+    from .workstreams import may_use
     if connector_id not in (None, ''): return store.get_connector(int(connector_id))
     rows = store.connectors_by_type(card_of(t))
     live = [c for c in rows if c.get('Active') and 'tool' in roles_of(c)]
+    if len(live) > 1: live = [c for c in live if may_use(store, tid, c['ConnectorId'])] or live
     if len(live) > 1:
         raise ValueError(f'{len(live)} {card_of(t)} connections are agent tools - say which with connector_id: '
                          + ', '.join(f"{c.get('Name') or c['Type']} ({c['ConnectorId']})" for c in live))

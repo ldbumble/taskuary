@@ -123,10 +123,22 @@ def tag_account(store, slug: str, connector_id: int = None, source_id: int = Non
 def may_use(store, tid, account, channel: str = 'email') -> bool:
     """THE ONE WALL: may the agent on task `tid` use this account - it is untagged, or tagged to the task's own profile. Asked by every
     door an AGENT's call goes through (a connector call, a send-from mailbox, a mail read, the calendar); the owner's own presses are
-    his and are never asked."""
+    his and are never asked - nor is the Assistant on the rail, which is his across every profile."""
     if not tid: return True
     tag = of_account(store, account, channel)
-    return not tag or tag == of_task(store, int(tid))
+    if not tag or tag == of_task(store, int(tid)): return True
+    from .general import is_dock
+    return is_dock(store.get_task(int(tid)))
+
+
+def sees(store, tid, other) -> bool:
+    """May the agent on task `tid` be shown task `other` where it searches across tasks (a search, a person's other tasks, what earlier
+    tasks settled): one under its own profile, or under none - another profile's work is made of that profile's accounts (may_use)."""
+    if not tid or not shown(store): return True
+    ws = of_task(store, int(other))
+    if not ws or ws == of_task(store, int(tid)): return True
+    from .general import is_dock
+    return is_dock(store.get_task(int(tid)))
 
 
 def move_card(store, tid, account, then: str = '', channel: str = 'email') -> dict | None:

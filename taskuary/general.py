@@ -1810,7 +1810,7 @@ def earlier_mail(store, tid: int) -> str:
     t, ms = store.get_task(tid) or {}, store.list_messages(tid) or []
     own = {m['MessageId'] for m in ms}
     who = list(dict.fromkeys(m['FromEmail'] for m in ms if m.get('FromEmail') and m.get('Direction') != 'out' and m.get('Status') != 'context'))
-    try: hits = [h for h in mailsearch.meeting_reads(store, who, t.get('Title') or '') if h['id'] not in own]
+    try: hits = [h for h in mailsearch.meeting_reads(store, who, t.get('Title') or '', tid=tid) if h['id'] not in own]
     except Exception as e:
         logger.debug(f'general: no earlier mail read for task {tid} - {e}'); hits = []
     return mailsearch.says(hits) if hits else ''

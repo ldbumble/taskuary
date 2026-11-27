@@ -688,7 +688,7 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
         p = shown_only({**query_only(p), **({'connector_id': p['connector_id']} if str(p.get('connector_id') or '').strip() else {})})
         # ...on THE card it will run on, pinned now (reports.tool_card): the press ran the first card of its type, under a card naming it
         if p.get('type') in REGISTRY and not p.get('connector_id'):
-            try: p = {**p, **({'connector_id': c['ConnectorId']} if (c := tool_card(store, p['type'])) else {})}
+            try: p = {**p, **({'connector_id': c['ConnectorId']} if (c := tool_card(store, p['type'], tid=task_id if actor == 'agent' else None)) else {})}
             except ValueError as e: several = str(e)
     # ...a run's ask to change its own routine is the card a run's own repair is (workflows.change_of): one card, one save
     routine = ''

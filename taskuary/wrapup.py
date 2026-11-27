@@ -516,8 +516,8 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     A message the work's answer already went to takes another only as a follow-up: `follow_up` (the agent says the owner
     asked for it) or the owner's own words in the conversation since the send.
     WHO HEARS IT IS THE AGENT'S CALL (the owner, 2026-11-06: "the agent decides who needs to know ... if it's sensitive only to that
-    person"): `answers` - the mail it replies to, an earlier one included; `only` - that mail's sender alone, nobody copied; `cc` - who
-    else is copied (replacing the thread's), an address not on the thread said so on the card; `why_to` - the one line the card says why.
+    person"): `answers` - the mail it replies to, an earlier one included; `only` - that mail's sender alone; `cc` - who else is copied, ON
+    TOP of the thread's own (with `only`: those alone), an address not on the thread said so on the card; `why_to` - the one line the card says why.
     `mailbox`: the From the agent named - checked as an email's is (slots.from_box), and a reply leaves from where its mail came in."""
     text = str(text or '').strip()
     if not text and files:
@@ -576,7 +576,6 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
                                         + f' - nothing was saved. An email from {box} is its own email: kind email with `to` and `from`.'}
     # ...and who else hears it: `only` is the sender alone, so it copies nobody; an address the thread never had is said on the card
     ccs = _addrs(cc)
-    if only and ccs: return {'ok': False, 'why': '--only sends it to that one person - leave --cc out, or drop --only to copy others'}
     from .slots import is_address
     bad = [a for a in ccs or [] if not is_address(a)]
     if bad: return {'ok': False, 'why': f"{', '.join(bad)} is not an email address - nothing was saved"}
@@ -629,7 +628,10 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     named = None
     if ans or only or ccs is not None:
         from .outbound import reply_envelope
-        if (named := reply_envelope(store, m, 'reply_to' if only else 'reply_all')) and ccs is not None: named = {**named, 'cc': [a for a in ccs if a not in named['to']]}
+        # ...a `cc` ADDS to who the thread copies (the card-tool design, 2026-11-27: "reply, and copy Gail" dropped everyone already on it) -
+        # `only` is the one way to narrow: the sender, and those it names
+        if (named := reply_envelope(store, m, 'reply_to' if only else 'reply_all')) and ccs is not None:
+            named = {**named, 'cc': [a for a in dict.fromkeys([*(named.get('cc') or []), *ccs]) if a not in named['to']]}
     chose = bool(str(to or '').strip() or answers or only or ccs is not None)
     mine = next((r for r in (held, live) if r and his_hand(store, r) and (
         _words(r.get('DraftText')) != _words(text) or repoints(r, named if chose else None, files))), None)
@@ -645,7 +647,7 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     # ...and why it goes to whom it goes, when the agent chose: the card says it beside the To and Cc
     pick = ' '.join(str(why_to or '').split())[:300]
     if only or ccs is not None or pick:
-        why += f" - {'only to the sender' if only else 'recipients chosen by the agent'}{': ' + pick if pick else ''}"
+        why += f" - {'only to the sender' + (' and ' + ', '.join(ccs) if ccs else '') if only else 'recipients chosen by the agent'}{': ' + pick if pick else ''}"
         if new: why += f" (copies {', '.join(new)}, not on this thread before)"
     if held:
         rid = held['ReviewId']; store.unhold_review(rid, why)

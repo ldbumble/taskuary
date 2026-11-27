@@ -47,13 +47,30 @@ def test_it_picks_who_else_is_copied_and_says_who_was_not_on_the_thread():
     out = wrapup.agent_reply(s, tid, 'Hi Gail - yes, Friday at noon.', 'assistant', answers=ids[1], cc=[f'Erin Blake <{ERIN}>', PAULA],
                              why_to='the caterer needs the time too')
     env, rv = s.review_envelope(out['review_id']), s.get_review(out['review_id'])
-    assert env['to'][0] == GAIL and env['cc'] == [ERIN, PAULA]                       # the agent's copies replace the thread's
+    assert env['to'][0] == GAIL and env['cc'] == [ERIN, PAULA]
     assert out['new_on_thread'] == [PAULA] and f'copies {PAULA}, not on this thread before' in rv['Reason']
+
+
+# A REPLY'S `cc` ADDS TO THE THREAD'S (the card-tool design, 2026-11-27, the owner's OK): "reply, and copy Paula" dropped everyone already
+# copied without a word. Who the thread copied stays on it; `only` is the one way to narrow, and with `cc` it is the sender and those alone
+def test_a_cc_adds_to_the_threads_own_copies_and_the_card_names_them_all():
+    s, tid, ids = thread()
+    out = wrapup.agent_reply(s, tid, 'Hi Ray - payroll has it, and Paula will confirm.', 'assistant', answers=ids[0], cc=[PAULA])
+    env = s.review_envelope(out['review_id'])
+    assert env['to'][0] == RAY and set(env['cc']) == {GAIL, ERIN, PAULA}, env
+    assert out['recipients'] == {'to': env['to'], 'cc': env['cc']}
+
+
+def test_only_with_a_cc_is_the_sender_and_those_it_names_alone():
+    s, tid, ids = thread()
+    out = wrapup.agent_reply(s, tid, 'Hi Ray - Paula in payroll is on it.', 'assistant', answers=ids[0], only=True, cc=[PAULA])
+    assert out['ok'], out
+    env = s.review_envelope(out['review_id'])
+    assert (env['to'], env['cc']) == ([RAY], [PAULA]), env
 
 
 def test_contradictions_and_non_addresses_save_nothing():
     s, tid, ids = thread()
-    assert not wrapup.agent_reply(s, tid, 'Hi Ray.', 'assistant', only=True, cc=[GAIL])['ok']
     bad = wrapup.agent_reply(s, tid, 'Hi Ray.', 'assistant', cc='finance team')
     assert bad == {'ok': False, 'why': 'finance team is not an email address - nothing was saved'}
     assert not s._rows("SELECT 1 FROM review WHERE TaskId=?", (tid,))

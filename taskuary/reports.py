@@ -153,7 +153,7 @@ def query_only(body: dict) -> dict:
     query may commit is the card's Authority (tools/run) or the owner's approval, never the caller's say-so."""
     t = str((body or {}).get('type') or '')
     keep, drop = ASKED.get(t, set()), PLACED.get(t, set())
-    return {k: v for k, v in (body or {}).items() if (k not in CONNECTION_KEYS or k in keep) and k not in drop and k != '_write'}
+    return {k: v for k, v in (body or {}).items() if (k not in CONNECTION_KEYS or k in keep) and k not in drop and k not in ('_write', '_hand')}
 
 
 def run_sqlite(cfg):

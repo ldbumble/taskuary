@@ -94,7 +94,9 @@ def pr_plan(store, task_id: int, p: dict = None) -> dict:
     p, t = p or {}, store.get_task(task_id) or {}
     norm = lambda d: os.path.normcase(os.path.realpath(d))
     at = landing.top(str(p.get('cwd') or ''))
-    cwd = at if at and norm(at) in map(norm, landing.named(store, task_id)) else getattr(hub_term.session_for(task_id), 'cwd', None) or ''
+    # ...else the session's checkout, else where the task's work is (landing.checkout: the one he named) - never a work folder with no git in it
+    ses = getattr(hub_term.session_for(task_id), 'cwd', None) or ''
+    cwd = at if at and norm(at) in map(norm, landing.named(store, task_id)) else (landing.top(ses) and ses) or landing.checkout(store, task_id) or ses
     repo = known_repo(store, task_id, cwd) or str(p.get('repo') or '')
     return {'title': f"[{task_ref(task_id)}] {' '.join(str(p.get('title') or '').split()) or t.get('Title') or 'work'}"[:120],
             'repo': repo, 'branch': branch_for(store, task_id, cwd) if cwd else '', 'base': base_of(store, cwd, repo), 'cwd': cwd}

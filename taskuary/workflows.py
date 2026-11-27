@@ -302,9 +302,9 @@ def script_routine(store, p: dict) -> tuple:
                **({'skill': skills.key(uses)} if uses else {}), **{k: p[k] for k in CLOCK if p.get(k)}}
         if why := schedule_error(cfg): return {}, why
         if any(x.get('Channel') == 'report' and str(x.get('Address') or '').casefold() == title.casefold() for x in store.list_sources(active_only=False)):
-            return {}, f'a routine or report named {title!r} already exists - give this one its own name, or change that one (change_routine)'
+            return {}, f'a routine or report named {title!r} already exists - give this one its own name, or change that one (propose kind routine with that title)'
         return cfg, ''
-    if not title or not script.strip(): return {}, 'save_routine needs `title` and `script` (the Python source, whole) - or `prompt`, its instructions'
+    if not title or not script.strip(): return {}, 'a new routine needs its title in `routine` and its `prompt` (its instructions) or `script` (the Python source, whole)'
     reads, steps = p.get('reads'), []
     if reads:
         if not isinstance(reads, dict) or flow.writes(reads.get('type')):
@@ -395,7 +395,7 @@ def change_of(store, tid: int, p: dict) -> tuple:
     # .txt and handed back "save them from your signed-in app"): `routine` - its number or its title - else the one this task is a run of
     src = named_setup(store, p.get('routine')) if str(p.get('routine') or '').strip() else source_of(store, store.get_task(int(tid)) or {})
     if not src: return {}, ('no routine is called that - name it by its title or number as Reports lists it' if p.get('routine') else
-                            'change_routine changes the routine this task is a run of, or the one named in `routine` - this one did not come from a routine (save_routine keeps a new one)')
+                            'this task is no run of a routine - name the one to change in `routine` (a new title makes a new routine)')
     if origin.of_task(store, tid)[0] == 'stranger': return {}, 'a routine is not changed from work a stranger started'
     # ...ITS NAME CHANGES ONLY WHERE A NEW ONE IS ASKED FOR (walk 26, 2026-11-27: asked to make a routine's posts punchier, the agent headed
     # its ask `title: "Make Social posts punchier"` - what propose's other acts call the thing they make - and his press renamed "Social posts"
@@ -428,7 +428,7 @@ def change_of(store, tid: int, p: dict) -> tuple:
         agent = [i for i, x in enumerate(new) if isinstance(x, dict) and x.get('kind') == 'agent']
         if len(agent) != 1: return {}, 'this routine has no one agent step to use a skill - send `flow`, its steps whole, the skill on the step that uses it'
         new = [{**x, 'skill': uses} if i == agent[0] else x for i, x in enumerate(new)]
-    if not isinstance(new, list) or not new: return {}, "change_routine needs `prompt` (its agent step's new instructions), `flow` (its steps whole), a schedule (daily_at, cron, every_minutes) or `rename` (its new name)"
+    if not isinstance(new, list) or not new: return {}, "a routine change needs `prompt` (its agent step's new instructions), `flow` (its steps whole), a schedule (daily_at, cron, every_minutes) or `rename` (its new name)"
     ok, why = flow.validate(store, new)
     if not ok: return {}, f'the changed steps do not hold: {why}'
     # ...and a script step it adds or repoints carries its script whole: a file's words are on no card, and could change after the press

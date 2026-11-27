@@ -118,8 +118,8 @@ class PeerTests(unittest.TestCase):
 class ToolTests(unittest.TestCase):
     def test_the_tools_are_listed_and_their_doors_are_the_agents(self):
         names = {t['name'] for t in agenttools.listing()}
-        self.assertTrue({'note_peers', 'propose_land'} <= names)
-        for n in ('note_peers', 'propose_land'):
+        self.assertTrue('note_peers' in names and 'propose_land' not in names, 'a landing is propose kind git')
+        for n in ('note_peers',):
             m, path = agenttools.TOOLS[n][3]
             self.assertEqual(guard.classify(m, path)[0], 'agent')
 

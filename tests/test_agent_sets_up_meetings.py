@@ -60,6 +60,40 @@ def test_a_meeting_the_agent_sets_up_is_an_invite_card_with_a_teams_link_sent_on
     assert body['isOnlineMeeting'] is True and body['onlineMeetingProvider'] == 'teamsForBusiness' and body['subject'] == 'Q4 review'
 
 
+def test_a_meeting_from_who_can_make_which_times_takes_the_best_slot_and_its_card_carries_the_grid():
+    """The design audit, 2026-11-27: every road drew the availability view, then worked the slot out again by hand for start/end (three date
+    formats) and put prose in `guessed`. set_up_meeting takes the view's own shape - people and their ranges - and Taskuary picks the slot the
+    view bands: the most people for `minutes`, then the longer shared stretch, then the earlier. The invite card draws that grid."""
+    from test_calendar_write import D
+    s = outlook_store(); tid = s.create_task({'Title': 'Plan the Q4 review', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    people = [{'name': ERIN, 'ranges': [{'day': D, 'from': '13:00', 'to': '17:00'}]},
+              {'name': GAIL, 'guessed': True, 'ranges': [{'day': D, 'from': '15:00', 'to': '17:30'}]},
+              {'name': 'ray@northwind.example'}]
+    with mock.patch.object(server, 'store', s), mock.patch.object(calwrite, 'busy', return_value=BUSY), \
+            mock.patch.object(calwrite, 'their_busy', return_value=([], [ERIN], [])), mock.patch.object(calwrite, 'requests', Fake()):
+        got, bad = call(tid, 'set_up_meeting', people=people, title='Q4 review', minutes=60, note='Walking the Q4 numbers.')
+        assert not bad, got
+        e = env(s, got['review'])
+        assert (e['start'], e['end']) == (f'{D} 15:00', f'{D} 16:00') and e['to'] == [ERIN, GAIL, 'ray@northwind.example']
+        assert e['grid'] == {'minutes': 60, 'people': people}
+        assert 'guessed' in s.get_review(got['review'])['Reason'] and GAIL in s.get_review(got['review'])['Reason']
+        # ...a day only a label names cannot go on a calendar: said with the fix, and nothing raised
+        said, bad = call(tid, 'set_up_meeting', people=[{'name': ERIN, 'ranges': [{'day': 'Tuesday', 'from': '10:00', 'to': '11:00'}]}], title='Q4 review')
+        assert bad and 'date' in said and 'YYYY-MM-DD' in said
+
+
+def test_the_slot_booked_is_the_one_the_view_bands():
+    "One arithmetic, two places: the team website/test/availability.test.mjs pins (overlap's best) gives the invite the same slot here."
+    r = lambda day, a, b: {'day': day, 'from': a, 'to': b}
+    TUE, WED = '2026-12-01', '2026-12-02'
+    team = [{'name': 'Erin Blake', 'ranges': [r(TUE, '14:00', '16:00')]}, {'name': 'Gail Moreno', 'ranges': [r(TUE, '15:00', '17:00')]},
+            {'name': 'Ray Colton', 'ranges': [r(WED, '10:00', '12:00'), r(TUE, '15:00', '16:00')]},
+            {'name': 'Marcus Reed', 'ranges': [r(TUE, '13:00', '16:00'), r(WED, '09:00', '11:00')]},
+            {'name': 'Paula Vance', 'ranges': [r(WED, '10:00', '11:00')]}, {'name': 'Omar Keller'}]
+    b = calwrite.best_slot(team, 60)
+    assert (b['day'], b['from'], b['to'], b['who']) == (TUE, 900, 960, ['Erin Blake', 'Gail Moreno', 'Ray Colton', 'Marcus Reed'])
+
+
 def test_a_name_nobody_can_place_comes_back_to_the_agent_never_guessed():
     s = outlook_store(); tid = s.create_task({'Title': 'Plan the Q4 review', 'Kind': 'general', 'Status': 'open'}, 'owner')
     with mock.patch.object(server, 'store', s):

@@ -526,7 +526,7 @@ def tools_for(tid: int, sid: str, browser: bool, stranger: bool = False, post=No
 # file_write / file_edit (an invoice to fill, 2026-11-15): a model shown only their names said it had no way to make the file, and stopped.
 # ...and THE BROWSER'S OTHER HANDS COME WITH ITS FIRST PAGE (browser_open loads BROWSER_MORE): a page is only ever looked at and clicked after one is open
 LATER = frozenset({'read_attachment', 'search_knowledge', 'owner_memory', 'calendar', 'list_systems', 'run_system', 'remind', 'ask_stronger',
-                   'note_peers', 'note_lead', 'use_repo', 'find_repos', 'propose_land', 'withdraw_draft', 'keep_card', 'sign_form', 'answer_invite', 'set_up_meeting', 'share',
+                   'note_peers', 'note_lead', 'use_repo', 'find_repos', 'withdraw_draft', 'keep_card', 'sign_form', 'answer_invite', 'set_up_meeting', 'share',
                    'search_tasks', 'person', 'past_figures', 'guide', 'todos', 'check_back', 'skills', 'routines', 'browser_look', 'browser_click', 'browser_fill', 'browser_press',
                    'browser_screenshot', 'web_fetch', 'files_list', 'reply_not_needed', 'my_task', 'new_task'}) - set(ALWAYS_LOAD)
 BROWSER_MORE = ('browser_look', 'browser_click', 'browser_fill', 'browser_press', 'browser_signup', 'browser_screenshot', 'hand_over')
@@ -749,7 +749,7 @@ def turn(brain, store, tid: int, sid: str, system: str, user: str, max_tokens: i
                 key, again = (name, json.dumps(a, sort_keys=True, default=str)), False
                 if name in reads and key in seen: out, err, again = _again(msgs, *seen[key], name, tools, budget), False, True
                 else:
-                    try: out, err = (find(tid, sid, tools, a.get('query') or ' '.join(map(str, a.get('names') or [])), store) if name == LOAD else _await(lambda: run_tool(store, tid, sid, name, a), cancel)), False
+                    try: out, err = (find(tid, sid, tools, a.get('query') or a.get('name') or ' '.join(map(str, a.get('names') or [])), store) if name == LOAD else _await(lambda: run_tool(store, tid, sid, name, a), cancel)), False
                     except Exception as e:
                         if stopped(): raise
                         from .agenttools import failed          # ...in the words every tool's failure takes: never "{name} failed: " over them

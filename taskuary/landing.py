@@ -113,6 +113,14 @@ def named(store, tid: int) -> list:
     return list(dict.fromkeys(t for d in readgate.named(store, tid) if (t := top(d))))
 
 
+def checkout(store, tid: int) -> str:
+    """WHERE THIS TASK'S WORK IS, WITH NO FOLDER GIVEN (the design audit, 2026-11-27: a pull request refused for no `cwd` four times, on a task whose
+    checkout he had named): the one its work started in, else the one he named, else the one its session works in - '' for none."""
+    from . import agentchannels
+    ns = named(store, tid)
+    return record(store, tid).get('cwd') or (ns[0] if len(ns) == 1 else '') or top(agentchannels.cwd_of(store, tid))
+
+
 def adopt(store, tid: int, cwd: str = '') -> dict:
     """The task's landing record: kept as it is where it has one; else the checkout the owner named that `cwd` is in (none given: the one he
     named, where he named one), marked `named`. {} where neither."""
@@ -492,16 +500,16 @@ def where(store, tid: int, how: str) -> str:
 # a TASKUARY-PROPOSE mark of `land` or `open_pr` - with "Agents may push / deploy" off a land/open_pr proposal was REFUSED, and the agent,
 # left with no road, asked "go ahead?" in words. On a task whose work is in a checkout each is the landing card's question instead: the
 # owner's press is the push, so no agent switch gates it. Elsewhere (no checkout, nothing to land) the proposal goes its old way.
-GIT_ACTS = {'push': 'push', 'deploy': 'push', 'push_direct': 'push', 'land': '', 'open_pr': 'pr'}
+GIT_ACTS = {'push_direct': 'push', 'land': '', 'open_pr': 'pr'}      # ...by the act's own name: an agent asks with propose kind git (agenttools.GIT_HOW)
 
 
 def from_proposal(store, tid: int, p: dict) -> dict | None:
     "A proposed git act as the landing card's question (propose) - None when it is not one, or the task has nothing to land."
     a = str((p or {}).get('action') or '').strip()
     if a not in GIT_ACTS: return None
-    if a in ('push', 'deploy'): adopt(store, tid, str(p.get('cwd') or p.get('folder') or p.get('path') or ''))   # ...his named checkout, where it is one
+    if a == 'push_direct': adopt(store, tid, str(p.get('cwd') or ''))   # ...his named checkout, where it is one
     s = state(store, tid)
-    if a in ('push', 'deploy') and not s:
+    if a == 'push_direct' and not s:
         from .agenttools import refusal
         raise ValueError(refusal('this task has no checkout to push from', 'give `cwd`: the git checkout the owner named for this work'))
     if s and s.get('noRemote'): return propose(store, tid, 'push')        # ...refused with why, and the way past
@@ -575,9 +583,7 @@ def push_asked(store, tid: int, cmd: str, cwd: str = '', about: str = '') -> tup
     how, deploy = 'pr' if s['own'] else 'push', next(iter(live), '')
     button = HOW['deploy' if deploy else how]
     if any(not _push_of(a) and not _moves(a) for a in segs):   # the commit in the same line has not run: nothing to put on the card yet
-        from .general import GENERAL_KINDS
-        ask = (f"propose (action push, cwd {s['cwd']}{f', deploy {deploy}' if deploy else ''})" if (store.get_task(tid) or {}).get('Kind') in GENERAL_KINDS
-               else f"propose_land (how {how}{f', deploy {deploy}' if deploy else ''})")
+        ask = f"propose (kind git, how {how}{f', deploy {deploy}' if deploy else ''})"
         return False, (f"Taskuary did not run this line: a push from this task's checkout is the owner's {button} button, never a shell step. Run "
                        f"the rest of it without the push, then call {ask} - they get the button, and Taskuary tells you when it went.")
     # ...a passed question is still the owner's press: the agent's own push raises it again, never runs (proposals.move_on)
@@ -655,7 +661,7 @@ def land(store, tid: int, how: str, actor: str = 'owner') -> dict:
     except Refused as e:
         store.audit('task', tid, 'land_refused', actor, detail={'how': how, 'why': str(e)[:300]})
         _hand_back(store, tid, f"The owner pressed {HOW.get(how, how)} on your work and it was refused: {e}. The question "
-                               "stays on the task. Do what that needs from your side, then ask for it again (propose_land) - or say in a line why you cannot.")
+                               "stays on the task. Do what that needs from your side, then ask for it again (propose kind git) - or say in a line why you cannot.")
         raise
 
 

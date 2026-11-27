@@ -37,12 +37,17 @@ def sync(store, tid: int) -> None:
     from . import proposals, workerstate as ws
     open_, cards = {r['RequestId']: r for r in _open(store, tid)}, _cards(store, tid)
     have = {json.loads(c['DraftText']).get('request') for c in cards}
+    # ...ONE CARD PER STEP, WHATEVER CAME OF IT (walk 25, 2026-11-26: his Dismiss settles the card, then closes the step - a read between the
+    # two found the step open with no card waiting and raised a second, drawn greyed under the one he had dismissed): a step is the event
+    # that asked it (`ev`), and one whose card was ever made has it
+    made = {p.get('ev') for r in store._rows("SELECT DraftText FROM review WHERE TaskId=? AND Kind='action' AND DraftText LIKE ?", (int(tid), f'%"{ACT}"%'))
+            if isinstance(p := json.loads(r['DraftText'] or '{}'), dict)}
     for rid, r in open_.items():
-        if rid in have: continue
+        if rid in have or r['Id'] in made: continue
         site, signin = ws.ask_of(rid)['site'], ws.ask_of(rid)['ask'] == 'signin'
         # ...and a sign-in the fill page can type carries its way there (`fill`): the card is the one place the step is said, link and all
         from .signin import fills
-        proposals.queue(store, int(tid), {'action': ACT, 'request': rid, 'sid': str(r.get('Sid') or ''), 'what': ' '.join(str(r.get('Text') or '').split())[:300],
+        proposals.queue(store, int(tid), {'action': ACT, 'request': rid, 'ev': r['Id'], 'sid': str(r.get('Sid') or ''), 'what': ' '.join(str(r.get('Text') or '').split())[:300],
                                           **({'site': site} if site else {}), **({'fill': True} if signin and fills(r.get('Text')) else {})}, 'taskuary')
     if not (gone := [c for c in cards if json.loads(c['DraftText']).get('request') not in open_]): return
     from . import browsergate, browserview, signin

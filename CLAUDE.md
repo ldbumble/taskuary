@@ -213,3 +213,9 @@ product: fix the code, never the test.
    tab of a card is shown, and a pressed card shows its result where it stands. Nothing he greyed is
    raised again by Taskuary: only the agent brings it back. Unrelated acts are separate cards; tabs
    are only for one call's set; a bulk act is one list card with its progress.
+11. **His edit is what goes** (the owner, 2026-11-26: "never even overwrite an edit of a text for any card from
+   user ... They would send email with generated email instead of their edits."). On every card with words he
+   can change, his press sends exactly what he typed, it is kept as what went, and the card shows it - before
+   the press, after it, and when it fails. Nothing writes over what he typed: no redraw, refresh, re-raise,
+   agent update or retry. Only something new (a new message on the thread) may bring the agent's rewrite, as
+   a new card beside his.

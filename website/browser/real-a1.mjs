@@ -3,7 +3,7 @@ import path from "node:path";
 import { api, connect, open, shot, timeline, save, buttons, sleep, type, quiet, out, info } from "./real-lib.mjs";
 import { record } from "./recorder.mjs";
 const [name, road = "acp"] = process.argv.slice(2);
-const got = await api("/api/fixture/coding", { git: info.git, real: true, pty: road === "pty" });
+const got = await api("/api/fixture/coding", { git: info.git, real: true });
 console.log("task", JSON.stringify(got));
 const { browser, page } = await connect();
 await page.reload({ waitUntil: "domcontentloaded" }); await sleep(3000);

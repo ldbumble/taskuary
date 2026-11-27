@@ -40,7 +40,6 @@ def world(tmp_path, monkeypatch):
     tid = s.create_task({'Title': 'Comment the ledger totals', 'Kind': 'coding', 'Status': 'in_progress'}, 'owner')
     monkeypatch.setattr(agents, '_resolve_cmd', lambda name: [FAKE[0]])
     monkeypatch.setattr(terminal, 'pretrust', lambda *a, **k: False)
-    monkeypatch.setattr(acpcoding, 'FELL_BACK', set())
     with mock.patch.dict(terminal.SESSIONS, {}, clear=True):
         yield s, tid, repo
         for t in list(terminal.SESSIONS.values()):
@@ -423,7 +422,7 @@ def test_the_plan_it_writes_is_in_the_coding_chat(world, monkeypatch):
 
 
 class Pane:
-    "A pty stand-in: the fallback's terminal, without starting a real one."
+    "A pty stand-in: a terminal, without starting a real one."
     def __init__(self, argv, cwd, label, task_id=None, agent=None, rows=32, cols=110, store=None, cli='', mode='full'):
         self.sid, self.argv, self.cwd, self.task_id, self.agent, self.cli, self.alive, self.started = 'pty-1', argv, cwd, task_id, agent, cli, True, ''
         self.seeded, self.accepted, self.ext_id = '', None, ''
@@ -431,28 +430,32 @@ class Pane:
     def info(self, *a, **k): return {'sid': self.sid}
 
 
-def test_an_adapter_that_will_not_start_is_todays_terminal_said_once(world, monkeypatch):
+def test_an_adapter_that_will_not_start_runs_nothing_and_the_task_says_why(world, monkeypatch):
+    "No terminal takes its place - there no step is asked for before it runs: the task says why and the way on, and is nobody's work."
     s, tid, repo = world
     monkeypatch.setenv('FAKE_ACP_FAIL', 'init')
-    monkeypatch.setattr(terminal, 'Term', Pane)
+    monkeypatch.setattr(terminal, 'Term', mock.Mock(side_effect=AssertionError('no terminal may open')))
     t = open_(s, tid, repo)
     assert isinstance(t, acpcoding.ACPCoding)
-    assert until(lambda: 'pty-1' in terminal.SESSIONS) and t.sid not in terminal.SESSIONS
-    pane = terminal.SESSIONS['pty-1']
-    until(lambda: pane.seeded)                            # ...registered a beat before its seed is typed in
-    assert pane.seeded == 'add a one-line comment to the top of totals.py'             # the same seed, typed in as today
-    assert any('did not start over ACP' in (c.get('Body') or '') and 'its terminal' in (c.get('Body') or '') for c in s.list_comments(tid))
-    assert acpcoding.FELL_BACK == {'claude'}
+    assert until(lambda: t.sid not in terminal.SESSIONS and not t.alive)
+    assert not [x for x in terminal.SESSIONS.values() if x.task_id == tid]
+    said = [c.get('Body') or '' for c in s.list_comments(tid)]
+    assert any("couldn't start" in b and 'nothing ran' in b and 'Try again' in b for b in said) and not any('terminal' in b for b in said)
 
 
-@pytest.mark.parametrize('how', ['switch off', 'no adapter', 'a stranger'])
-def test_the_switch_off_a_cli_without_acp_and_a_strangers_task_keep_the_terminal(world, monkeypatch, how):
+@pytest.mark.parametrize('how', ['no adapter', 'a stranger'])
+def test_a_cli_without_an_adapter_and_a_strangers_task_keep_the_terminal(world, monkeypatch, how):
     s, tid, repo = world
     monkeypatch.setattr(terminal, 'Term', Pane)
-    if how == 'switch off': s.set_setting(agents.ACP_SETTING, '0', 'owner')
     if how == 'no adapter': s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'gemini', 'cwd': str(repo)}))
     if how == 'a stranger': monkeypatch.setattr('taskuary.origin.launch_mode', lambda *a, **k: 'auto')
     assert isinstance(open_(s, tid, repo), Pane)
+
+
+def test_an_old_homes_saved_switch_off_is_not_read(world):
+    s, tid, repo = world
+    s.set_setting('acp_cli', '0', 'owner')
+    assert isinstance(open_(s, tid, repo), acpcoding.ACPCoding)
 
 
 # ── a stranger's task: never over ACP, on either road ────────────────────────────────────────────────────────────────────────
@@ -466,12 +469,11 @@ def stranger(s):
 
 @pytest.fixture
 def floor(world, monkeypatch, tmp_path):
-    "A stranger's task beside the owner's, the switch on, the adapters present, and a claude new enough to run one."
+    "A stranger's task beside the owner's, the adapters present, and a claude new enough to run one."
     s, tid, repo = world
     monkeypatch.setattr(origin, '_claude_version', lambda cmd='claude': (2, 1, 299))
     (tmp_path / 'temp').mkdir(); monkeypatch.setattr('tempfile.gettempdir', lambda: str(tmp_path / 'temp'))
     monkeypatch.setattr(terminal, 'Term', Pane)
-    assert agents.acp_on(s)
     return s, stranger(s), repo
 
 
@@ -525,11 +527,11 @@ def test_the_general_road_refuses_a_strangers_task_too(floor, how):
     look (no tools), or the classifier (every tool off) - stays on argv: acp_ok False, and the road refuses a trimmed env on its own."""
     s, t, repo = floor
     p = _general(s, t, **how)
-    assert not p.get('acp_ok') and not agents._acp_road(p, s)
+    assert not p.get('acp_ok') and not agents._acp_road(p)
     if how: assert p.get('strict_env') is True
-    assert not agents._acp_road({**p, 'acp_ok': True}, s) if p.get('strict_env') else True
+    assert not agents._acp_road({**p, 'acp_ok': True}) if p.get('strict_env') else True
     mine = _general(s, s.create_task({'Title': 'mine', 'Kind': 'coding', 'Source': 'manual', 'OriginBase': 'owner'}, 'owner'), cli_tools=True)
-    assert mine.get('acp_ok') is True and agents._acp_road(mine, s)          # the owner's own run with hands is the one that goes
+    assert mine.get('acp_ok') is True and agents._acp_road(mine)          # the owner's own run with hands is the one that goes
 
 
 def test_a_user_role_update_the_adapter_sent_itself_is_the_agents_not_the_owners(world):

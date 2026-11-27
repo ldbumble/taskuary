@@ -30,7 +30,7 @@ The owner's reasons for moving every CLI onto it (2026-11-06):
 | Step | What | State |
 |---|---|---|
 | 1 | Every headless CLI run of the general agent over ACP: claude and codex through their adapters, Taskuary's own rules answering every permission, the same steps on screen | **built** |
-| 2 | Coding sessions on claude and codex over ACP, drawn as the one coding chat; the pty as the fallback | **built** — see below |
+| 2 | Coding sessions on claude and codex over ACP, drawn as the one coding chat; their only road | **built** — see below |
 | 3 | What the rules hold put to the owner as buttons, in the chat and on a bound channel (`permissions.py`) | **built** |
 
 API brains stay direct: an API connector is already a typed stream.
@@ -41,18 +41,19 @@ API brains stay direct: an API connector is already a typed stream.
 |---|---|---|
 | General agent, CLI run with hands (`make_cli_llm` with `cli_tools` or a `cwd`) | **ACP**, argv as the fallback | every tool call typed, answered by our rules; the session id returned, not scraped |
 | General agent, plain chat on an API connector | API, unchanged | "dramatically quicker than launching a coding CLI" |
-| Coding sessions on claude and codex | **ACP** (`acpcoding.py`), the pty as the fallback | step 2: one chat, every call typed and answered by our rules |
+| Coding sessions on claude and codex | **ACP** (`acpcoding.py`), the only road | step 2: one chat, every call typed and answered by our rules |
 | Any other coding CLI, and a stranger's coding task | native CLI in a pty | not checked over ACP / argv's floor |
 | Triage, the drafter, quick look-ups (`no_hands`) | argv, unchanged | one classification with every tool off; there is nothing to permit |
 | A stranger's task (`origin.launch_mode`: `auto`, `look`) | argv, unchanged | its floor is built from argv: the CLI's own reviewer mode, `--strict-mcp-config`, a trimmed environment |
 
-The switch is **Settings → Agent permissions → Run CLI agents over ACP** (`acp_cli`, on by default). Off, every
-run takes argv as before.
+There is no switch. An agent's work on claude or codex is asked for step by step before it runs, always: a CLI in a
+terminal only reports what it did after it did it. A home that saved the old `acp_cli` setting keeps the row; nothing reads it.
 
 **The fallback.** A run whose agent does not get as far as a session — the adapter will not start, it fails
 `initialize`, or `session/new` errors for any reason but a sign-in — raises `ACPStartError`; nothing of the turn
-ran, so `run_cli` takes the argv road for that run. The log says so **once per CLI** per process, and the run's
-launch line says so on every run. A sign-in error is said as a sign-in, as on argv, and never falls back (argv
+ran. It is tried once more; then `run_cli` takes the argv road for that run - except a run that may only go held
+(`held_only`: codex, whose command line cannot keep its reads), which runs nothing and says so. The log says so **once per CLI**
+per process, and the run's launch line says so on every run. A sign-in error is said as a sign-in, as on argv, and never falls back (argv
 would fail the same way). An error *mid-turn* never falls back either: the turn may have done part of its work.
 
 ## Which CLIs, and how each starts
@@ -230,9 +231,9 @@ One general-agent turn through each adapter on the real road (`make_cli_llm` →
 
 ## Step 2: coding sessions over ACP
 
-*Built 2026-11-06 (`taskuary/acpcoding.py`).* With the switch on, a coding task on **claude or codex** opens as one ACP connection
+*Built 2026-11-06 (`taskuary/acpcoding.py`).* A coding task on **claude or codex** opens as one ACP connection
 in the task's checkout instead of the CLI's TUI in a pty. `terminal.open_session` decides (`acpcoding.wanted`: a task's session, the
-owner's own - `origin.launch_mode` `full` - the switch on, a CLI with an adapter) and everything it already builds is the launch:
+owner's own - `origin.launch_mode` `full` - a CLI with an adapter) and everything it already builds is the launch:
 
 - **the argv, carried over**: the pane's flags after the binary - Taskuary's MCP server, `--disallowedTools`, the theme/hooks
   `--settings` file for claude; the `-c` keys for codex - go through `agents.acp_launch` exactly as a general run's do. The model and
@@ -275,13 +276,14 @@ coding session reads it unchanged:
 
 `terminal.is_acp(t)` is the one test, and it is `is True`: a test's `Mock` answers every attribute.
 
-**The fallback.** An adapter that does not get as far as a session - it does not start, fails `initialize`, or `session/new` fails,
-a sign-in included (the pty is where the owner signs in) - takes the session out of the registry and opens today's pty with the same
-seed (`open_session(..., pty=True)`), said once in the log per CLI and on the task. A turn that fails part-way is said and not retried.
+**No fallback.** An adapter that does not get as far as a session - it does not start, fails `initialize`, or `session/new` fails,
+a sign-in included - takes the session out of the registry and runs nothing: no pty opens in its place, where no step would be asked
+for before it ran. The task says why and the way on (`ACPCoding._not_started`), and the owner's next line starts it again. A turn
+that fails part-way is said and not retried.
 
-**Still in a pty**: a stranger's task (its floor is argv's), the switch off, a native-ACP CLI (gemini, qwen, cursor, copilot, devin -
-their coding road over ACP is not checked yet), argv-only CLIs (muse, opencode, kimi), a plain shell, the CLI install and sign-in
-terminals, and any coding session whose adapter did not start.
+**Still in a pty**: a stranger's task (its floor is argv's), a native-ACP CLI (gemini, qwen, cursor, copilot, devin -
+their coding road over ACP is not checked yet), argv-only CLIs (muse, opencode, kimi), a plain shell, and the CLI install and sign-in
+terminals.
 
 ### A stranger's task never runs over ACP
 
@@ -334,7 +336,7 @@ holds its CLI until it is closed.
 - **Hooks**: Claude's still run (the SDK loads user settings). Codex's `--dangerously-bypass-hook-trust` has no
   `CODEX_CONFIG` spelling, so Codex hooks the owner never approved stay skipped on this road, as they were before
   that flag.
-- **A protocol error is a new failure mode** — answered by the fallback at start, and by failing loudly mid-turn.
+- **A protocol error is a new failure mode** — said on the task at start (a general run falls back to argv), and failing loudly mid-turn.
 
 ## Deliberately not built
 

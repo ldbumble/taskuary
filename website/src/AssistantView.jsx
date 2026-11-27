@@ -25,7 +25,7 @@ import api from "./api.js";
 import { DEMO_SAID, demoNo } from "./apiError.js";
 import { runOperation } from "./taskOps.js";
 import { SIDE_NAV } from "./sideNav.js";
-import { askReply } from "./replyDraft.js";
+import { askReply, openOwnReply } from "./replyDraft.js";
 import { DEMO } from "./demoApi.js";
 import { lazyView } from "./lazyView.jsx";
 import AllDone from "./AllDone.jsx";
@@ -2490,6 +2490,8 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
       }
       // A REPLY OR A REWRITE IS HIS ASK TO THE TASK'S AGENT (replyDraft.askReply, the owner 2026-11-27): it writes it and raises its card -
       // the under-way line is said again in its place by the server, with its task a chip away
+      // ...BUT ON AN FYI IT IS HIS OWN BOX, on the FYI (replyDraft.openOwnReply, the owner 2026-11-27, option A): no agent, no task
+      if (verb === "reply" && cur?.kind === "fyi" && mid) { openOwnReply(cur.key); return; }
       if ((verb === "reply" || verb === "redraft") && mid) {
         const data = await askReply(api, mid, d.text || null, verb, d.line || null);
         if (!d.line && data?.receipt) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: data.taskId, ref: data.ref, text: data.receipt.text,

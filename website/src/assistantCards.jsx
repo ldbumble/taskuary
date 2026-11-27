@@ -35,7 +35,7 @@ import { laneMeta } from "./funnelPile.js";
 import { age, ago, plural } from "./timeWords.js";
 import { SECTION, WORD, ideaWord } from "./lanes.js";
 import { kindLabel, AGENT_SHOWN } from "./kinds.js";
-import { askReply } from "./replyDraft.js";
+import { askReply, OWN_REPLY, ownReply } from "./replyDraft.js";
 import { agentRuns } from "./taskFilter.js";
 import { progressLine } from "./checklist.js";
 import { RepoPicker } from "./RepoPicker.jsx";
@@ -58,7 +58,7 @@ import { WorkstreamLabel } from "./Workstream.jsx";   // the idea's workstream, 
 import { channelName } from "./taskSources.js";
 import { personName } from "./personName.js";
 import { repliesOf } from "./connectorCatalog.js";
-import Artifact from "./Artifact.jsx";
+import Artifact, { ReviewCard } from "./Artifact.jsx";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "That did not work";
 const edge = (lane) => { const r = laneMeta(lane).role; return r ? ROLES[r].solid : "#d3ccc1"; };
@@ -1333,12 +1333,40 @@ function FyiSections({ card, table, items, msgs, foot, err, next }) {
       { key: "from", n: 1, name: STEPS[0].name, lines: [plural(n, "message"), ...items.slice(0, 3).map((i) => `${whoName(i.who)}: “${i.title || ""}”`)],
         foot: says.foot,
         // ...the handful as ONE list in one card (the owner, 2026-10-28: "too much space in fyi"): a hairline between messages, not a card each
-        body: <><ItemPart className="tq-item-msgs" sx={{ py: 0.25 }}>{msgs}</ItemPart><CardErr err={err} /></> }]}
+        body: <><ItemPart className="tq-item-msgs" sx={{ py: 0.25 }}>{msgs}</ItemPart><CardErr err={err} />{!batch && <OwnReply card={card} />}</> }]}
       moves={<ItemPart data-tq-fyi-close="">
           <div className="tq-card-note">{says.note || `Nothing to decide - ${n === 1 ? "it only wants" : "they only want"} you to know.`}</div>
           <RowMoves next={next} on={batch ? "" : "on its panes"} />
           {foot}
         </ItemPart>} />;
+}
+
+// HIS OWN REPLY ON AN FYI (the owner, 2026-11-27, option A): the row's Reply opens his box here - To and Subject filled in, his words, his
+// Send; no agent, no task (server.open_reply's `own`). The one card component; what he typed is what goes (locked rule 11), and one that did
+// not go is pressed again as the same letter
+function OwnReply({ card }) {
+  const [box, setBox] = useState(null), [text, setText] = useState(""), [busy, setBusy] = useState(false);
+  const [rid, setRid] = useState(null), [went, setWent] = useState(false), [err, setErr] = useState("");
+  useEffect(() => {
+    const on = (e) => { if (e.detail?.key === card.key && card.mid) ownReply(api, card.mid).then(setBox).catch((x) => setErr(failOf(x))); };
+    window.addEventListener(OWN_REPLY, on); return () => window.removeEventListener(OWN_REPLY, on);
+  }, [card.key, card.mid]);
+  if (!box) return err ? <CardErr err={err} /> : null;
+  const send = async () => {
+    setBusy(true); setErr("");
+    try {
+      const data = rid ? (await api.post(`/api/reviews/${rid}/decide`, { verb: "approve", final_text: text })).data : await ownReply(api, card.mid, text);
+      if (data?.reviewId) setRid(data.reviewId);
+      if (data?.ok && !data.send_error) setWent(true); else setErr(data?.send_error || data?.why || "It did not go.");
+    } catch (x) { setErr(failOf(x)); }
+    setBusy(false);
+  };
+  return <ReviewCard id={rid || ""} kind="reply" state={went ? "done" : "waiting"} label="Your reply" failed={err}
+    fields={[{ key: "to", type: "read", label: "To", value: box.to.join(", ") }, ...(box.cc.length ? [{ key: "cc", type: "read", label: "Cc", value: box.cc.join(", ") }] : []),
+      { key: "subject", type: "read", label: "Subject", value: box.subject },
+      { key: "draft", type: "text", box: true, label: "Your reply", value: text, editable: !went && !busy, onChange: setText }]}
+    press={[{ id: "own-send", label: btn("approve", busy ? "busy" : undefined), tone: "p", disabled: busy || !text.trim(), run: send }]}
+    after={went ? { mark: "sent", label: `✓ ${btn("approve", "done")}`, line: `to ${box.to.join(", ")}` } : null} />;
 }
 
 // how many fyi a card can show whole before every line folds to one (FyisCard)

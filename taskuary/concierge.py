@@ -149,7 +149,8 @@ CHIPS ={'review': ('send_close', 'approve', 'close', 'defer', 'watch', 'not_ours
          'todo': ('reply', 'close', 'mine', 'regular_agent', 'defer', 'watch', 'not_ours', 'next'),
          # an fyi can become WORK too: "make this job stop emailing me" arrived as a notification (2026-09-24) - and that is its ONE move,
          # everywhere (the owner, 2026-11-25): Send to agent, which puts it on the box; Make it a task and Not for me went, a phish's too
-         'fyi': ('regular_agent', 'next'),
+         # ...and Reply, where a person wrote it (the owner, 2026-11-27, option A): HIS OWN box on the FYI - no agent, no task (server.open_reply's `own`)
+         'fyi': ('reply', 'regular_agent', 'next'),
          # the handful carries its own "All read, next" button (2026-09-14) and nothing else
          'fyis': (),
          # a connection that stopped answering: ask it again, here - Next was its only word, a dead end (2026-09-23)
@@ -905,6 +906,8 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
     # Telling a person about it is its own act - the agent emails them - so the line says that, and no reply is put on the table
     if verb in WRITES_BACK and store is not None and (item.get('tid') or item.get('mid')) and not item.get('rid') and not _replies_on(store, item):
         return f"Nobody reads a reply on {what} - no person sent it. To tell someone about it, say who and what, and the agent emails them."
+    # ...nor to a message triage read as a trick (`danger`, the model's own word): an answer is what it fishes for
+    if verb in WRITES_BACK and item.get('danger'): return f"{what} looks like a trick - no reply goes to it. Send it to an agent to look into it."
     if verb == 'report_off' and not _report_on(store, item):
         return f"There's no report on {what} running on its clock to switch off."
     # ...an agent still WORKING on it takes the words as its next prompt (agent.tell, the owner 2026-11-02)

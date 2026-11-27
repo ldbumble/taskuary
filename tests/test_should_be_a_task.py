@@ -25,14 +25,14 @@ class ShouldBeATaskTests(unittest.TestCase):
         self.c = TestClient(server.app)
         self.mid = ingest.ingest_message(self.s, dict(MSG), llm=FYI)['message_id']
 
-    def test_an_fyi_has_one_move_send_to_agent_a_phish_too(self):
-        """The owner, 2026-11-25: ONE move on an FYI, everywhere - Make it a task and Not for me went from its card, a phish's as well; the row
-        the Assistant may light (row_buttons) is the same one move."""
+    def test_an_fyi_has_send_to_agent_and_his_own_reply_and_a_phish_send_to_agent_alone(self):
+        """The owner, 2026-11-25: Make it a task and Not for me went from an FYI's card, a phish's as well; the row the Assistant may light
+        (row_buttons) is the same. 2026-11-27 (option A): Reply beside it, his own box - never on a phish, which an answer is what it fishes for."""
         self.assertEqual(self.s.get_message(self.mid)['Status'], 'filed')
         fyi = {'kind': 'fyi', 'lane': 'fyi', 'mid': self.mid, 'key': f'msg:{self.mid}'}
-        for it in (fyi, {**fyi, 'danger': 'Wants Alex to sign in on a look-alike page.', 'danger_aim': 'owner'}):
-            self.assertEqual([c['verb'] for c in concierge.chips_for(self.s, it)], ['regular_agent', 'next'])
-            self.assertEqual([b['label'] for b in concierge.row_buttons(self.s, it)], [buttons.label('regular_agent')])
+        for it, want in ((fyi, ['reply', 'regular_agent']), ({**fyi, 'danger': 'Wants Alex to sign in on a look-alike page.', 'danger_aim': 'owner'}, ['regular_agent'])):
+            self.assertEqual([c['verb'] for c in concierge.chips_for(self.s, it)], [*want, 'next'])
+            self.assertEqual([b['label'] for b in concierge.row_buttons(self.s, it)], [buttons.label(v) for v in want])
         # ...and asked for in words, Make it a task is the plain button's name - no FYI state of its own
         prop = concierge.propose_for(self.s, None, {'verb': 'mine', 'on_item': True}, fyi, '')
         self.assertEqual(prop['label'], 'Make it a task')
@@ -65,6 +65,47 @@ class ShouldBeATaskTests(unittest.TestCase):
         self.assertIn(LINE, self.s.get_doc('learned'))
         prompts.clear(); next_one(5, brain)
         self.assertTrue(any(LINE in p for p in prompts), 'the learned line reached triage')
+
+
+# REPLY ON AN FYI IS HIS OWN (the owner, 2026-11-27, option A): the FYI's Reply opens HIS reply box on the FYI - To and Subject filled in, his
+# words, his Send. No agent, no task; the send road his every Send takes, his words exactly (locked rule 11); the FYI is answered by it
+PERSON = {**MSG, 'external_id': 'fyi-lunch', 'from_email': 'erin@northwind.example', 'from_name': 'Erin Blake', 'conversation_id': 'conv-lunch',
+          'subject': 'Team lunch moved to Thursday', 'body': 'Just so you know - the team lunch is Thursday at noon now.'}
+HIS = 'Thanks Erin - Thursday works.\n\nAlex'
+
+
+class AReplyOnAnFyiIsHisOwn(unittest.TestCase):
+    def setUp(self):
+        self.s = MemoryStore(); self.s.set_setting('owner_email', 'alex@northwind.example', 't')
+        p = mock.patch.object(server, 'store', self.s); p.start(); self.addCleanup(p.stop)
+        self.c = TestClient(server.app)
+        self.mid = ingest.ingest_message(self.s, dict(PERSON), llm=lambda *a, **k: json.dumps(
+            {'intent': 'fyi', 'why': 'a colleague letting Alex know', 'sender_class': 'person'}))['message_id']
+    def rail(self):
+        from taskuary import funnel, terminal
+        funnel.invalidate()
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            return [i['kind'] for i in funnel.build(self.s)['items'] if i.get('mid') == self.mid]
+
+    def test_reply_opens_his_own_box_on_the_fyi_and_his_send_sends_his_words_with_no_task_and_no_agent(self):
+        from taskuary import general, outbound
+        fyi = {'kind': 'fyi', 'lane': 'fyi', 'mid': self.mid, 'key': f'msg:{self.mid}'}
+        self.assertEqual([c['verb'] for c in concierge.chips_for(self.s, fyi)][0], 'reply')
+        with mock.patch.object(general, 'to_agent') as agent:
+            box = self.c.post(f'/api/messages/{self.mid}/reply', json={'write': True, 'own': True}).json()
+            self.assertEqual((box['to'], box['subject'], box['taskId']), (['erin@northwind.example'], f"Re: {PERSON['subject']}", None))
+            self.assertFalse(self.s._rows('SELECT 1 FROM review'), 'nothing filed while he writes: the FYI stays the FYI his box stands on')
+            self.assertEqual(self.rail(), ['fyi'])
+            sent = []
+            with mock.patch.object(outbound, 'reply_to_message', side_effect=lambda st, m, body, **k: sent.append(body) or {'channel': 'email', 'to': ['erin@northwind.example']}):
+                got = self.c.post(f'/api/messages/{self.mid}/reply', json={'write': True, 'own': True, 'text': HIS}).json()
+        self.assertTrue(got['ok'], got); self.assertEqual(sent, [HIS]); self.assertFalse(agent.called)
+        self.assertIsNone(self.s.get_message(self.mid)['TaskId']); self.assertFalse(self.s._rows('SELECT 1 FROM task'))
+        rv = self.s.get_review(got['reviewId'])
+        self.assertEqual((rv['FinalText'], rv['TaskId']), (HIS, None), 'his words, kept as what went')
+        self.assertTrue(self.s.sent_reply(message_id=self.mid), 'the FYI is answered')
+        self.assertEqual(self.rail(), [], 'and off the rail')
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -21,3 +21,13 @@ export async function askReply(api, mid, instruction = null, verb = "reply", lin
   const { data } = await api.post(`/api/messages/${mid}/reply`, { instruction, verb, ...(line ? { line } : {}) });
   return data;
 }
+
+// ...BUT ON AN FYI IT IS HIS OWN (the owner, 2026-11-27, option A): the row's Reply opens HIS box on the FYI itself (assistantCards.OwnReply) -
+// To and Subject filled in, his words, his Send; no agent, no task (server.open_reply's `own`)
+export const OWN_REPLY = "tq-own-reply";
+export const openOwnReply = (key) => window.dispatchEvent(new CustomEvent(OWN_REPLY, { detail: { key } }));
+// ...the box's envelope (no `text`), or his words sent on the one Send road - {to, cc, subject, reviewId?, ok?, send_error?}
+export async function ownReply(api, mid, text = null) {
+  const { data } = await api.post(`/api/messages/${mid}/reply`, { write: true, own: true, ...(text != null ? { text } : {}) });
+  return data;
+}

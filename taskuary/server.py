@@ -4465,6 +4465,8 @@ class OpenReplyBody(BaseModel):
     verb: str = 'reply'              # the press it came from (reply, redraft): its label is his line where he typed nothing
     line: int | None = None          # the Assistant's under-way line for it, said again in its place with how it went (concierge.settle)
     write: bool = False              # WRITE IT YOURSELF (no AI connected - the bar's own Reply): the box for his own words, nobody behind it
+    own: bool = False                # ...ON THE FYI ITSELF (the owner, 2026-11-27, option A): no task, no agent - the box stands on the FYI
+    text: str | None = None          # ...and his words in it, at his Send: what goes, exactly
 
 
 @app.post('/api/messages/{mid}/reply')
@@ -4485,8 +4487,9 @@ def open_reply(mid: int, body: OpenReplyBody = None):
     if automated(m): raise HTTPException(422, concierge.cannot({'mid': mid, 'title': m.get('Subject') or 'this message'}, 'reply', store))
     # THE OWNER'S OWN MAIL A PROMISE WAS MADE IN is answered on the promise's task (store.promised_in)
     promise = store.promise_task(mid) if (m.get('Status') == 'context' or m.get('Direction') == 'out') else None
-    tid = promise['TaskId'] if promise else m.get('TaskId') or task_from_message(store, mid, ACTOR, 'general')
     body = body or OpenReplyBody()
+    if body.write and body.own and not (promise or m.get('TaskId')): return _own_reply(m, body.text)
+    tid = promise['TaskId'] if promise else m.get('TaskId') or task_from_message(store, mid, ACTOR, 'general')
     if body.write:
         # ...and answering a thread its last reply closed is work again (TQ-0426): the task comes back, where its card is seen
         if (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'): store.update_task(tid, {'Status': 'waiting'}, ACTOR)
@@ -4502,6 +4505,20 @@ def open_reply(mid: int, body: OpenReplyBody = None):
     text = f'Asked the agent on {task_ref(tid)} - its card lands in the task.'
     concierge.settle(store, body.line, text, True)
     return {'taskId': tid, 'ref': task_ref(tid), 'asked': bool(how), 'receipt': {'status': 'done', 'text': text}}
+
+
+def _own_reply(m: dict, text: str | None) -> dict:
+    """REPLY ON AN FYI IS HIS OWN (the owner, 2026-11-27, option A): his box on the FYI, To and Subject filled in, his words, his Send - no
+    agent, no task (store.add_review: answering filed chatter is a reply, not a project). With no `text`: the envelope his box shows. With it:
+    the letter filed as he wrote it and sent on the one road every Send takes (verdicts.decide), his words exactly (locked rule 11) - a send
+    that fails stays on its card, the FYI's review. {to, cc, subject, taskId: None[, reviewId, ok, ...]}."""
+    from . import verdicts
+    env = outbound.reply_envelope(store, m) or {}
+    shown = {'to': env.get('to') or [m.get('FromEmail')], 'cc': env.get('cc') or [], 'subject': outbound.re_subject(m.get('Subject') or ''), 'taskId': None}
+    if not (text := str(text or '').strip()): return shown
+    rid = store.add_review({'MessageId': m['MessageId'], 'Kind': 'draft', 'Status': 'pending', 'Reason': 'your own reply'})
+    if env: store.set_review_envelope(rid, env)
+    return {**shown, 'reviewId': rid, **verdicts.decide(store, store.get_review(rid), 'approve', text, actor=ACTOR)}
 
 
 class NotMineBody(BaseModel):

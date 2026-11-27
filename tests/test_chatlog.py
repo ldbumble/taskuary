@@ -1240,6 +1240,22 @@ def test_a_card_raised_after_his_newest_line_stands_under_that_line_never_as_a_t
     assert where() == was and chatlog.live_card(s, tid)['review'] == mail
 
 
+def test_a_card_he_pressed_is_never_the_box_while_the_cards_worker_is_behind():
+    """macOS CI, 2026-11-27: read before the cards worker had put his press into the log, the approved card was still the one box every
+    surface draws. Invented posts."""
+    from unittest import mock
+    from taskuary import conversation, general
+    s, tid = world()
+    conversation.hear(s, tid, turn=True)
+    x = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Origin': 'agent', 'Reason': 'the post you asked for',
+                      'DraftText': json.dumps({'action': 'run_tool', 'type': 'x_post', 'text': 'We close the month in four days.'})})
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'The post is set up.')
+    chatlog.read(s, tid)
+    assert chatlog.live_card(s, tid)['review'] == x
+    with mock.patch.object(chatlog, 'advance_soon'): s.decide_review(x, 'approved', None, 'owner')
+    assert chatlog.live_card(s, tid) is None
+
+
 def test_a_step_held_on_a_cards_road_that_the_agent_went_on_without_ends_with_the_card_nothing_stays_pending_with_no_button():
     """Walk 24 (2026-11-25, the real Claude CLI): Post via the browser on the X card; on the way a look at the page was held, then the final
     Post; the Post stood as the card's step, he approved it and the post went up - and the look stayed pending for good, a row of a card that

@@ -1256,8 +1256,12 @@ def _newest_turn(store, tid: int):
 
 def live_card(store, tid: int):
     "The one action box of task `tid` - what every surface draws (the chat, the browser's view, the phone, the rail) - or None."
-    with store.lock:
-        r = store.cx.execute("SELECT * FROM chatlog WHERE TaskId=? AND Kind='card' AND State='pending'", (int(tid),)).fetchone()
+    def row():
+        with store.lock: return store.cx.execute("SELECT * FROM chatlog WHERE TaskId=? AND Kind='card' AND State='pending'", (int(tid),)).fetchone()
+    # ...AND NEVER ONE ALREADY PRESSED (macOS CI, 2026-11-27: read before the cards worker had put his press into the log, the approved card was
+    # still the box to draw): a row whose review no longer waits is advanced here, by the one writer, before it is said
+    if (r := row()) and (rv := store.get_review(int(_item(dict(r)).get('review') or 0))) and rv.get('Status') not in ('pending', 'held'):
+        advance(store, tid); r = row()
     return _item(dict(r)) if r else None
 
 

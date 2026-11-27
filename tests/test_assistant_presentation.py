@@ -130,15 +130,16 @@ class FyiHandfulTests(unittest.TestCase):
         self.assertEqual([(a[1:3], kw.get('read')) for a, kw in settle.call_args_list], [((key, 'surfaced'), True), ((key, 'later'), False)])
         self.assertEqual(s.funnel_states()[key]['Status'], 'later')
 
-    def test_reply_on_one_entry_drafts_at_once_and_marks_nothing(self):
+    def test_reply_on_one_entry_asks_its_agent_and_marks_nothing(self):
         s = store(); got = five_fyi(s)
         with quiet(), mock.patch.object(concierge, 'brain', return_value=None): card = concierge.surface(s)['item']
         first = card['items'][0]
-        with mock.patch.object(server, 'store', s), quiet(), mock.patch('taskuary.responder.draft_for_message', return_value='Welcome back, Rebecca!'), \
-             mock.patch('taskuary.outbound.reply_to_message') as send:
+        # ...Reply is his line to the entry's task agent, which writes the reply and raises its card (the owner, 2026-11-27): no side writer drafts it
+        with mock.patch.object(server, 'store', s), quiet(), mock.patch('taskuary.responder.draft_for_message') as wrote, \
+             mock.patch('taskuary.general.to_agent', return_value='woke') as asked, mock.patch('taskuary.outbound.reply_to_message') as send:
             r = client(s).post(f"/api/messages/{first['mid']}/reply", json={'draft': True}).json()
-        self.assertTrue(r['reviewId']); self.assertEqual(s.get_review(r['reviewId'])['Status'], 'pending')
-        send.assert_not_called()
+        self.assertTrue(r['asked']); self.assertEqual(asked.call_args.args[1], r['taskId'])
+        wrote.assert_not_called(); send.assert_not_called()
         self.assertEqual({s.funnel_states().get(i['key'], {}).get('Status') for i in card['items']}, {None})
 
 

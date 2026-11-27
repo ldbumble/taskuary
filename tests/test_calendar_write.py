@@ -123,11 +123,13 @@ class TheOwnersMove(unittest.TestCase):
         self.assertNotIn('reply', verbs)
         # ...and Send to agent after them, to prepare for it (the owner, 2026-11-02) - its box asks what first, as on the task page
         self.assertIn('regular_agent', verbs); self.assertIn('regular_agent', {b['verb'] for b in concierge.row_buttons(s, item)})
-        # ...and once an answer is drafted all three stay, its Send first: another press REPLACES the drafted answer
+        # ...and once an answer is drafted all three stay - its Send is on its card in the task, never the rail's (the owner, 2026-11-27: "ANY
+        # approval is ONE ACTION CARD"): another press REPLACES the drafted answer
         with mock.patch.object(calwrite, 'busy', return_value=BUSY): first = calwrite.draft(s, out['message_id'], 'accept')
         rv_item = {**item, 'kind': 'review', 'rid': first['reviewId'], 'draft': True}
         verbs = [c['verb'] for c in concierge.chips_for(s, rv_item)]
-        self.assertEqual(verbs[:5], ['send_close', 'approve', 'accept_invite', 'decline_invite', 'propose_time']); self.assertNotIn('redraft', verbs)
+        self.assertEqual(verbs[:3], ['accept_invite', 'decline_invite', 'propose_time'])
+        self.assertFalse({'send_close', 'approve', 'redraft'} & set(verbs))
         with mock.patch.object(calwrite, 'busy', return_value=BUSY): second = calwrite.draft(s, out['message_id'], 'decline')
         self.assertEqual(s.get_review(first['reviewId'])['Status'], 'superseded')
         pending = [r for r in s.reviews_for_message(out['message_id']) if r['Status'] == 'pending']

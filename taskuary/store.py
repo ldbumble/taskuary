@@ -284,11 +284,11 @@ def email_from_soul(soul: str):
 OWNER_DOCS = ('soul', 'agents', 'job', 'digest', 'triage', 'style', 'counsel', 'advisor')     # LEARNED.md is written from the memory (memory.render), never a template
 UNREAD_DOCS = ('agent', 'coding', 'learned-before-r10')          # ...and an old install's copies of them are never listed, searched or shown (doc_names)
 
-def _fold(s) -> str: return ' '.join(str(s or '').split())
+def _squash(s) -> str: return ' '.join(str(s or '').split())   # whitespace folded; _fold above is search's case-fold
 def shipped_before(name: str) -> set:
     "Every earlier shipped text of owner document `name` (templates/history/<name>-*.md), whitespace folded: a copy matching one is stock."
     from pathlib import Path
-    return {_fold(p.read_text(encoding='utf-8')) for p in (Path(__file__).parent / 'templates' / 'history').glob(f'{name}-*.md')}
+    return {_squash(p.read_text(encoding='utf-8')) for p in (Path(__file__).parent / 'templates' / 'history').glob(f'{name}-*.md')}
 
 TEMPLATE_OWNER = ('John Smith', 'john.smith@example.com')
 NO_NAME_YET = ("THE OWNER'S NAME IS NOT SET YET. Who the owner is comes from the mailbox the mail arrived in (addressed_to_you), never "
@@ -6803,7 +6803,7 @@ class SQLiteStore:
                 # ...and A COPY OF AN EARLIER SHIPPED TEXT tracks it too, whoever saved it (templates/history/<name>-*.md): a stock copy saved
                 # by a machine or an old release stayed on the old words for good - only the owner's own words are his
                 row = self.cx.execute("SELECT Content FROM doc WHERE Name=? AND UpdatedBy<>'template'", (name,)).fetchone()
-                if row and _fold(row['Content']) in shipped_before(name):
+                if row and _squash(row['Content']) in shipped_before(name):
                     self.cx.execute("UPDATE doc SET Content=?, UpdatedBy='template', UpdatedAt=? WHERE Name=?", (txt, _now(), name))
     def save_doc(self, name, content, actor):
         self._exec('INSERT INTO doc (Name, Content, UpdatedBy, UpdatedAt) VALUES (?,?,?,?) ON CONFLICT(Name) DO UPDATE SET Content=?, UpdatedBy=?, UpdatedAt=?',

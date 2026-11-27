@@ -444,7 +444,7 @@ class GeneralApiTests(unittest.TestCase):
         self.assertEqual(out['session']['pick'], 'cli:claude')
 
     def test_api_starts_and_resumes_the_same_session(self):
-        store = MemoryStore(); tid = general_task(store, 'research'); cid = connect_openai(store)
+        store = MemoryStore(); tid = general_task(store); cid = connect_openai(store)
         with mock.patch.object(server, 'store', store), mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
              mock.patch.object(llm, 'build_llm', return_value=lambda *a, **k: 'Research result'):
             client = TestClient(server.app)
@@ -493,7 +493,8 @@ class GeneralApiTests(unittest.TestCase):
         ever ran, so a task somebody wrote in about closed with them unanswered - and the assistant
         compensated by writing the reply into the chat, where STYLE.md never touches it and nothing
         can send it (TQ-0440/0441 closed unanswered; TQ-0443 sat open with an unsendable draft). The reply is raised as the one owed - the
-        agent's to write, never a tool-less writer's (the owner, 2026-11-10: "no more triage creates draft. agent should be doing it")."""
+        agent's to write, never a tool-less writer's (the owner, 2026-11-10: "no more triage creates draft. agent should be doing it") - and
+        its card is the agent's to raise: Taskuary puts up no empty one of its own (2026-11-27)."""
         store = MemoryStore(); tid = general_task(store)
         mid = store.add_message({'ExternalId': 'cash-dashboard', 'Channel': 'email', 'FromEmail': 'rachel@example.com',
                                  'Subject': 'Cash dashboard', 'BodyText': 'The balances still pull from the old accounts.'})
@@ -501,9 +502,8 @@ class GeneralApiTests(unittest.TestCase):
         store.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'The dashboard still points at the legacy accounts.')
         with mock.patch.object(responder, 'draft_for_review') as write_draft:
             out = wrapup.wrap(store, tid, close=True, actor='assistant')
-        review = store.pending_review(tid, live_only=False)
         self.assertTrue(out['drafting'])
-        self.assertEqual((review['MessageId'], review['Kind'], review.get('DraftText') or ''), (mid, 'draft', ''))
+        self.assertIsNone(store.pending_review(tid, live_only=False))
         self.assertEqual(store.get_task(tid)['Status'], 'waiting')
         write_draft.assert_not_called()
 

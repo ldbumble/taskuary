@@ -146,10 +146,10 @@ class EverydayAsks(unittest.TestCase):
                 self.assertEqual(r['ideal']['say'], f"Opened {concierge.OPENED.get(r['q'].expect[4:], 'New')} with your words - {drawn[r['q'].expect[4:]]} there {'keeps' if r['q'].expect == 'new:note' else 'starts'} it.")
 
     def test_a_message_on_whatsapp_comes_up_on_whatsapp_to_the_group_named(self):
-        # the owner, 2026-11-02: "write to the team WhatsApp group that ..." opened Send something on email with To empty - now drafted on a
-        # task of its own and opened (2026-11-12), its Send the owner's
+        # the owner, 2026-11-02: "write to the team WhatsApp group that ..." opened Send something on email with To empty - now a task of its own
+        # (2026-11-12) whose agent writes it and raises its card, its Send the owner's (2026-11-27: no side writer drafts it)
         r = next(r for r in self.rows if r['q'].text.startswith('write to the Northwind team WhatsApp group'))
-        self.assertIn('did:outbox', r['ideal']['got']); self.assertTrue(r['ideal']['say'].startswith('Drafted it on TQ-'), r['ideal']['say'])
+        self.assertIn('did:outbox', r['ideal']['got']); self.assertTrue(r['ideal']['say'].startswith('Asked the agent on TQ-'), r['ideal']['say'])
 
     def test_the_assistant_starts_an_agent_opens_one_at_work_and_never_presses(self):
         # the owner, 2026-11-02: "it itself should not be the agent" - "start it" starts the agent; and 2026-11-18: "it should just open the

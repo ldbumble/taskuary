@@ -535,8 +535,8 @@ AREA_TASK = [
     Q('task', 'cc gail on the reply', 'review', c('redraft', text='copy Gail Moreno'), 'open:#task=', view=TASK4V, freq=2),
     Q('task', 'scrap the draft, no reply needed', 'review', c('close'), 'pressed:close', view=TASK4V, freq=3,
       note='a reply draft is never rejected (the owner, 2026-10-01): Mark done closes it with nothing sent'),
-    Q('task', 'reject the draft', 'review', [c('review.reject'), c('redraft', text='write it again')], 'open:#task=', view=TASK4V, freq=2,
-      tools=('review.reject',), note="the miss names Redraft and Mark done, the draft's real ways out"),
+    Q('task', 'reject the draft', 'review', [c('redraft', text='write it again')], 'open:#task=', view=TASK4V, freq=2,
+      tools=('redraft',), note="the Assistant never rejects (2026-11-27): the card's own Dismiss is his no; redraft asks the task's agent"),
     Q('task', 'ask tom when it was paid', 'review', c('task.clarify', text='When was it paid?'), 'light:reply', view=TASK4V, freq=2),
     Q('task', 'aprove and send', 'review', ['Send is yours to press.\n' + v(op='point', target='row:approve')], 'view:point:row:approve', tools=('words',),
       view=TASK4V, freq=4, note='a send is lit for the owner, never pressed'),
@@ -1269,7 +1269,7 @@ AREA_LIVE = [
 CASES += AREA_LIVE
 
 # not tools, but roads the prompt carries all the same: a link to a page (pages_block), plain words, the desk's numbered action words
-ROADS = {'pages': 'APP PAGES', 'screens': 'APP SCREENS', 'words': 'Answer in plain words', 'digit': None}
+ROADS = {'pages': 'APP PAGES', 'screens': 'APP SCREENS', 'words': 'WHAT CODE READS', 'digit': None}
 
 
 def _scripted(answers, seen):
@@ -1353,7 +1353,7 @@ def _guards(stack, sort=None, live=None, agenda=None):
 # bare word. A proposal on a phone is its question; a look-up's answer and a link are the model's own words.
 ACTS = ('Opened ', 'Marked ', 'Wrote ', 'Put down ', 'Drafting ', 'Rewriting ', 'Snoozed ', 'Closed ', 'Added ', 'Set ', 'Noted ',
         'Ticked ', 'Unticked ', 'Took ', 'Renamed ', 'Brought up ', 'Remembered ', 'Filed ', 'Put on ', 'Blocked', 'Stopped ', 'Triage already ', 'Org chart: ',
-        'Nothing went', 'Saved ', 'Adopted ', 'Kept ', 'Told ', 'Pressed ', 'Started ', 'Nothing started', 'Drafted ', 'Made ')
+        'Nothing went', 'Saved ', 'Adopted ', 'Kept ', 'Told ', 'Pressed ', 'Started ', 'Nothing started', 'Drafted ', 'Made ', 'Asked ', 'Asking ')
 def said_what(say: str, got: list, q) -> bool:
     acted = [g for g in got if g.split(':')[0] in ('open', 'new', 'next', 'draft', 'cleared', 'did')]
     # ...and a lit button or a press speaks for itself - the filled button, the card's badge - and says no line (the owner, 2026-10-23)

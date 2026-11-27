@@ -28,10 +28,10 @@ class TrackRecordTests(unittest.TestCase):
         self.assertEqual(rows[0], {'kind': 'reply', 'domain': 'vendor.example', 'as_drafted': 2, 'edited': 1, 'rejected': 1, 'total': 4})
         self.assertEqual((rows[1]['kind'], rows[1]['domain'], rows[1]['as_drafted']), ('new email', 'northwind.example', 1))
 
-    def test_the_assistant_reads_it_as_evidence_never_as_a_reason_to_send(self):
+    def test_the_assistant_reads_it_as_evidence_and_that_nothing_goes_without_his_press(self):
         s = MemoryStore(); _sent(s, 'erin@vendor.example', 'approve')
         b = B.by_id('track_record')
-        self.assertIn('never a reason to send', b.heading)
+        self.assertIn("nothing goes without the owner's press", b.heading)
         text, _ = b.build(s, B.defaults(s, b))
         self.assertEqual(text, '- reply to vendor.example: 1 sent as drafted, 0 edited first, 0 rejected')
         self.assertIn('track_record', B.card('memory').blocks)

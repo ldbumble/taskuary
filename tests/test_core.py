@@ -841,8 +841,8 @@ class CoreTests(unittest.TestCase):
 
     def test_finishing_raises_the_reply_owed_and_no_writer_drafts_it(self):
         """A finished session's reply is the AGENT's (the owner, 2026-11-10: "no more triage creates draft. agent should be doing
-        it"): one it did not write waits as the reply owed, with no words on it - no tool-less writer drafts it from the report - and
-        it survives the close, which used to supersede it on the spot."""
+        it"): no tool-less writer drafts it from the report, and no empty card of Taskuary's own is raised for it either (the owner,
+        2026-11-27: "remove any place where the agent is not putting up cards") - the task waits on the reply owed, the agent's to raise."""
         from unittest import mock
         from taskuary.wrapup import finish
         s = MemoryStore()
@@ -858,9 +858,7 @@ class CoreTests(unittest.TestCase):
             return 'The import is running again - a bad date had stopped the batch.'
         with mock.patch('taskuary.llm.build_llm', return_value=fake_llm):
             finish(s, tid, rep)
-        pend = s.list_reviews('pending')
-        self.assertEqual((len(pend), pend[0]['Kind'], s.get_task(tid)['Status']), (1, 'draft', 'waiting'))
-        self.assertFalse(pend[0].get('DraftText'))
+        self.assertEqual((s.list_reviews('pending'), s.get_task(tid)['Status']), ([], 'waiting'))
         self.assertEqual(seen, {})                                     # no model was asked for it
 
     def test_a_pressed_reply_uses_the_complete_eight_item_result(self):

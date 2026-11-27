@@ -983,11 +983,12 @@ class AgentEndingsTests(unittest.TestCase):
         self.assertEqual((p['kind'], p['target']), ('task.complete', tid))
         self.assertEqual(s.get_task(tid)['Status'], 'in_progress')                   # nothing until the click
         with mock.patch.object(terminal, 'session_for') as found, mock.patch.object(terminal, 'close') as closed, \
-             mock.patch.object(wrapup, 'wrap', side_effect=self._saves(found)) as saved:
+             mock.patch.object(wrapup, 'wrap') as saved:
             found.return_value = mock.Mock(sid='s1', alive=True)
             run(s, p, live=live)
         self.assertEqual(s.get_task(tid)['Status'], 'done')
-        closed.assert_called_once_with('s1'); saved.assert_called_once()     # saved as Stop and save saves it, then closed (2026-11-02)
+        # Mark done stops the agent and closes the task - no write-up behind it, the chat is the record (the owner, 2026-11-27)
+        closed.assert_called_once_with('s1'); saved.assert_not_called()
 
     def test_done_on_a_parked_agent_closes_the_task_and_the_session(self):
         s, tid, live, item = self._parked()
@@ -995,16 +996,10 @@ class AgentEndingsTests(unittest.TestCase):
         # "done" is Mark done (Handled is gone); the same close stops the session (close_task)
         self.assertEqual((p['kind'], p['target'], p['label']), ('task.complete', tid, buttons.label('close')))
         with mock.patch.object(terminal, 'session_for') as found, mock.patch.object(terminal, 'close') as closed, \
-             mock.patch.object(wrapup, 'wrap', side_effect=self._saves(found)) as saved:
+             mock.patch.object(wrapup, 'wrap') as saved:
             found.return_value = mock.Mock(sid='s1', alive=True)
             run(s, p, live=live)
-        self.assertEqual(s.get_task(tid)['Status'], 'done'); closed.assert_called_once_with('s1'); saved.assert_called_once()
-
-    @staticmethod
-    def _saves(found):
-        "Stop and save's ending (wrapup.wrap), which the close now runs first: it ends the session it wrote up."
-        def wrap(store, tid, **kw): terminal.close('s1'); found.return_value = None; return {'wrap': 'done'}
-        return wrap
+        self.assertEqual(s.get_task(tid)['Status'], 'done'); closed.assert_called_once_with('s1'); saved.assert_not_called()
 
     def test_wrap_it_up_with_nothing_to_wrap_says_so(self):
         s, tid, live, item = self._parked()

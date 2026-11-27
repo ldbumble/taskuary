@@ -156,6 +156,13 @@ class TheAppIndexed(unittest.TestCase):
     """search.places: everything the app can bring up, best first, each with its link (the owner, 2026-10-20: "index the entire app")."""
     def first(self, s, q): return (search.places(s, q) or [{}])[0].get('href')
 
+    def test_a_capitalised_title_is_found_by_its_word(self):
+        """A whitespace helper named _fold, added to store.py, replaced the store's case-fold that search imports: "routines" no longer
+        hit "Reports → Routines" and brought up Mail rules (the merge check, 2026-11-27)."""
+        s = MemoryStore()
+        self.assertEqual(self.first(s, 'routines'), '#report=workflows')
+        self.assertEqual(self.first(s, 'sound'), '#settings=config&group=Notifications&key=hand_sound')
+
     def test_a_setting_by_the_word_that_names_it_and_the_rest_weighs_nothing(self):
         s = MemoryStore()
         self.assertEqual(self.first(s, 'turn off the sound'), '#settings=config&group=Notifications&key=hand_sound')

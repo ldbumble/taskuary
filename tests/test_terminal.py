@@ -669,9 +669,10 @@ class TerminalTests(unittest.TestCase):
             self.assertEqual(typed, [])                                        # the agent was never asked
             self.assertNotIn(t.sid, [x['sid'] for x in terminal.listing()])     # session gone
             pend = [r for r in server.store.list_reviews('pending') if r['TaskId'] == tid]
-            # the sender is still owed the answer - the agent's to write, never a second voice's (2026-11-10)
-            self.assertEqual((len(pend), pend[0]['Kind'], pend[0].get('DraftText') or ''), (1, 'draft', ''))
-            self.assertEqual(server.store.get_task(tid)['Status'], 'waiting')  # waiting on you to send it; dismissing it closes the task
+            # the sender is still owed the answer - the agent's to write and its card to raise, never a second voice's (2026-11-10) nor an
+            # empty card of Taskuary's own (2026-11-27)
+            self.assertEqual(pend, [])
+            self.assertEqual(server.store.get_task(tid)['Status'], 'waiting')  # the reply owed is what it waits on
             self.assertNotIn('stay:open', server.store.get_task(tid).get('Tags') or '')   # ...because the owner's mark came off (2026-09-07)
             self.assertTrue(any('flipped it to N/N' in cm['Body'] for cm in server.store.list_comments(tid)))
         finally:
@@ -700,7 +701,7 @@ class TerminalTests(unittest.TestCase):
             # ...and the note rides into the next session
             seed = terminal.seed_text(server.store, tid)
             self.assertIn('malformed date', seed)
-            self.assertIn('do not start over', seed)
+            self.assertIn('HANDOVER: an earlier session on this task was paused and left this', seed)
         finally:
             terminal.close(t.sid)
 

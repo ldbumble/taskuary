@@ -37,16 +37,16 @@ def verdict(**v):
 
 
 class TheGuideSaysHowToReadOne(unittest.TestCase):
-    def test_the_model_is_told_an_invitation_is_fyi_unless_the_owner_must_answer(self):
+    def test_the_model_is_told_an_invitation_is_a_task_unless_it_is_spam(self):
+        # the owner, 2026-11-27: "invites should in general be tasks if not spam" - a colleague's workspace invite was filed fyi twice
         s = MemoryStore(); s.set_setting('owner_email', ME, 't')
         llm = verdict(intent='fyi', asks_owner=False)
         out = arrive(s, llm)
         self.assertEqual((out['status'], out['task_id']), ('filed', None))
         said = llm.seen[0]
-        self.assertIn('An invitation from a vendor or a list', said)
-        self.assertIn('nothing lapses', said)
-        self.assertIn('theirs to answer only when they asked for it', said)
-        self.assertIn('An invitation from a vendor or a list', triage.SHIPPED)
+        self.assertIn('An invitation is a task unless it is spam', said)
+        self.assertIn('sent to a crowd to sell something', said)
+        self.assertIn('An invitation is a task unless it is spam', triage.SHIPPED)
 
     def test_a_reminder_that_the_owners_own_event_starts_soon_is_not_an_invitation(self):
         # a registrant's "your webinar will begin in 1 hour" was filed fyi under the invitation rule and never reached them

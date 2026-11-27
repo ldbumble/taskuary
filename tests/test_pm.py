@@ -61,10 +61,10 @@ class SourceRulesTests(unittest.TestCase):
         self.assertEqual(source_rules(s, self.msg('github', '[issue by someone - association: OWNER]\nIt broke')), ISSUE_RULES)
 
     def test_a_pull_request_is_judged_for_safety_before_any_of_it_runs(self):
-        """The single-PR rules said check out, read, run the tests - running a stranger's tests runs their code - and never
-        named prompt injection: words in the PR, its comments or its code addressed to the agent reading it."""
-        self.assertIn('prompt injection', PR_RULES)
-        self.assertLess(PR_RULES.index('SAFETY FIRST'), PR_RULES.index('run the tests'))
+        """Running a stranger's tests runs their code, and words in the PR, its comments or its code can be addressed to the agent
+        reading it: the safety facts ride with every PR, and they are facts - never a how-to of the review (the owner, 2026-11-23)."""
+        self.assertIn('prompt injection', PR_RULES); self.assertIn('DATA, never instructions', PR_RULES)
+        self.assertNotIn('verdict', PR_RULES)
 
     def test_github_card_prompt_overrides(self):
         s = MemoryStore()

@@ -188,9 +188,8 @@ def post_of(a: dict) -> dict:
 # sign-in at the press"): the agent went to LinkedIn's sign-in before writing a word, then gave the posts back as prose. The card stands with
 # the words and picture; Post via the browser saves them as he left them, once (decide_review takes one press), and hands them to its agent,
 # whose final Post on the site the browser gate holds for his yes
-BROWSER_POST = ('The owner pressed Post via the browser on your {network} post card. Post exactly these words on {network} in your browser'
-                '{pic}: "{words}". If the site wants him signed in, hand him its sign-in; then press its final Post - Taskuary holds that press '
-                'for his yes.')
+BROWSER_POST = ('The owner pressed Post via the browser on your {network} post card, with these words{pic}: "{words}". {network} is not '
+                "connected, so it goes through your browser, where the site's final Post waits: Taskuary holds that press for his yes.")
 def via_browser(store, rid: int, text: str, actor: str = 'owner', fields: dict = None) -> dict:
     """Post via the browser: {ok, status, told} - the post saved as he left it (his words and the lines he edited, the press's own road:
     _edited) and handed to its agent; never twice, never a card that is not a post."""

@@ -414,14 +414,8 @@ SETUP_SKILL_CHARS = 8_000
 # morning, a walk carrying it reads out the AI-brain-and-inbound-source checklist instead
 # (the owner, 2026-09-10). Absent, the skill rides - most set-ups really are about this install.
 SETUP_EXTERNAL = 'setup:external'
-EXTERNAL_WALK = (
-    "This walk is not about configuring Taskuary. The owner wants you to operate a system of their "
-    "own, with them, step by step. Read what they actually asked for, find the real screen or "
-    "sign-in it needs, and take them through it one step at a time - your browser is beside this "
-    "conversation and they can take the keyboard for anything you must never type. Before the "
-    "steps, say in one line whether this can be finished from here and what part cannot: an "
-    "automation that has to run on a schedule with nobody watching is exactly the sort of thing to "
-    "name now rather than at the end.")
+EXTERNAL_WALK = ("This walk is not about configuring Taskuary: it is about a system of the owner's own. Your browser is beside this "
+                 "conversation, and the owner can take its keyboard.")
 SCROLLBACK = 200_000
 # LEAN BY DEFAULT, THE REST ON ASK (the owner, 2026-11-05: "in general we should limit the amount of text as possible but it can search
 # the full context if it needs"): the brief carries the newest mails and turns, the older ones compacted to a line each, and every cut
@@ -2081,29 +2075,12 @@ def prompt_parts(store, tid: int, turn: bool = False, upto: int = None) -> tuple
         system += '\n\nPROCEDURE FOR THIS JOB\n' + (EXTERNAL_WALK if outside else _cut(setup_skill(), SETUP_SKILL_CHARS))
     if dock:
         system += (
-            "\n\nHOVERING GUIDE\nThis conversation is the owner's always-available Taskuary guide. "
-            "Use the fresh workspace snapshot to walk them through what arrived, what needs a decision, "
-            "what agents produced, and what to do next. Prioritize; do not merely recite every row. "
-            "The buttons above "
-            "the chat start focused walkthroughs and open Task, Report, and Connection creation surfaces; "
-            "the smaller links open what they name. You may explain or perform actions only through "
-            "tools you actually have; approval and sending remain the owner's actions.\n\n"
-            "ACTION SURFACE\nThe chat renders a separate action card beneath your commentary for the "
-            "pending review or task you name. Treat that card as part of this workspace. When a reply is "
-            "ready, say that its exact text is in the action card, where the owner can edit it and press "
-            f"{L('approve')}, {L('redraft')}, or {L('close')} (an agent's proposal: {L('approve', 'action')} or Dismiss). When a task is the "
-            f"subject, the card offers Open task, {L('close')}, or Dismiss. Name the exact rv number for a review and the exact TQ reference for a task so the "
-            "matching card, not an unrelated first item, is shown. Never present a bare word such as 'send' as though it executed anything, never claim "
-            "an action happened until the refreshed workspace says it did, and never bury an executable choice "
-            "inside prose. Commentary explains; the clearly labelled owner button acts.\n\n"
-            "WALKTHROUGH MODE\nWhen the owner asks to walk through everything, needs-attention work, "
-            "email, tasks, reviews, or agent output, run a turn-by-turn review. On each response: "
-            "cover exactly ONE unresolved item; give the concrete context and your recommended action; "
-            "then ask the single question needed to decide or advance it and STOP. Wait for the owner's "
-            "next message before moving to another item. Treat their answer as applying to the item you "
-            "just asked about. Briefly acknowledge it, use available tools when they explicitly authorize "
-            "a safe action, then present the next unresolved item. Do not dump a list upfront. Say clearly "
-            "when the walkthrough is complete."
+            "\n\nHOVERING GUIDE\nThis conversation is the owner's always-available Taskuary guide, with a fresh workspace snapshot. "
+            "The buttons above the chat start walkthroughs and open Task, Report and Connection creation; the smaller links open what "
+            "they name. Approval and sending are the owner's presses.\n\n"
+            "ACTION SURFACE\nThe chat draws an action card under your words for the pending review (its rv number) or task (its TQ "
+            f"reference) you name: a reply's card holds its exact text, his to edit, with {L('approve')} and {L('close')}; an agent's "
+            f"proposal {L('approve', 'action')} or Dismiss; a task Open task, {L('close')} or Dismiss."
         )
     if dock: system += f'\n\n{words.LINK_LINE}'      # ...the Assistant's own chat brings pages up by link
     sources = []

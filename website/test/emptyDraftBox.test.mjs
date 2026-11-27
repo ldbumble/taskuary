@@ -46,5 +46,6 @@ test("an owed reply with no words is no card in an agent's chat, whatever its re
   assert.match(page, /const chatReview = !inTurns \? pendingReview : null;/);
   assert.match(page, /const chatBody = \(pendingReview = chatReview\) =>/);
   assert.match(page, /const waits = !!\(chatReview \|\|/);
-  assert.match(page, /\{replyEmpty && !inTurns && \(/, "the box nothing was said about only on a to-do no agent has touched");
+  // ...and no box nothing was said about, not even on a to-do no agent has touched: its Reply asks the agent (the owner, 2026-11-27)
+  assert.doesNotMatch(page, /replyEmpty|data-tq-reply-empty/);
 });

@@ -1,8 +1,7 @@
-// Some work is not ours to do: hand it to the person whose job it is, with the AI writing
-// the forward message out of the task's own context (systems, ids, errors) so you are not
-// retyping the thread into an email. Its own module because two places offer it: the Tasks
-// header bar, and the Timeline panel you get by hovering a row - same form, wherever you
-// happened to notice the task.
+// Some work is not ours to do: hand it to the person whose job it is - in your own words, sent at your press, or as your ask to the
+// task's agent, which writes the forward from the task's own context and raises its card (the owner, 2026-11-27: "side model should
+// never work in agent canvas"). Its own module because two places offer it: the Tasks header bar, and the Timeline panel you get by
+// hovering a row - same form, wherever you happened to notice the task.
 import React, { useEffect, useState } from "react";
 import { Box, Button, CircularProgress, MenuItem, Select, TextField, Typography } from "@mui/material";
 import ForwardToInboxIcon from "@mui/icons-material/ForwardToInbox";
@@ -17,7 +16,7 @@ const msgOf = (e, fallback) => (e?.response?.status === 404
   : e?.response?.data?.detail || fallback);
 
 // `onLeave` / `onStay`: the page puts the task down at the press and takes it back with the reason if the send fails
-// `said`: {to, note} the owner typed to the Assistant ("send this to gail@...") - To filled, and the forward drafted with their note at once
+// `said`: {to, note} the owner typed to the Assistant ("send this to gail@...") - To and the words filled in
 export const Handoff = ({ taskId, onSent, onLeave, onStay, said = null }) => {
   const [to, setTo] = useState(said?.to || "");
   const [channel, setChannel] = useState("email");
@@ -26,7 +25,7 @@ export const Handoff = ({ taskId, onSent, onLeave, onStay, said = null }) => {
   useEffect(() => {
     api.get("/api/send-targets").then(({ data }) => setTargets((data.data || []).map((x) => x.channel))).catch(() => {});
   }, []);
-  const [text, setText] = useState("");
+  const [text, setText] = useState(said?.note || "");
   const [busy, setBusy] = useState("");
   const people = useContacts();
   const [sent, setSent] = useState(null);
@@ -45,14 +44,14 @@ export const Handoff = ({ taskId, onSent, onLeave, onStay, said = null }) => {
     return () => { on = false; };
   }, [taskId]);
   const call = async (body) => (await api.post(`/api/tasks/${taskId}/handoff`, body)).data;
-  const draft = async (who = to) => {
-    setBusy("draft"); setErr("");
-    try { setText((await call({ to: who, channel, draft_only: true, note: said?.note || null })).draft); }
-    catch (e) { setText((v) => v || said?.note || ""); setErr(msgOf(e, "Could not write the message")); }
+  // SEND TO AGENT: his ask to the task's agent - who, by what, and his words as its note; the agent's card comes back for his Send
+  const [asked, setAsked] = useState(false);
+  const ask = async () => {
+    setBusy("ask"); setErr("");
+    try { await call({ to, channel, text, ask: true }); setAsked(true); }
+    catch (e) { setErr(msgOf(e, "Could not ask the agent")); }
     setBusy("");
   };
-  // ...asked for in words, it is ready for Send when it opens: nothing goes before the owner presses it
-  useEffect(() => { if (said?.to) draft(said.to); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
   const send = async () => {
     setBusy("send"); setErr("");
     // PUT DOWN AT THE PRESS, like every close (the owner, 2026-10-01): the task leaves while the forward goes out - the server
@@ -62,6 +61,11 @@ export const Handoff = ({ taskId, onSent, onLeave, onStay, said = null }) => {
     catch (e) { const msg = msgOf(e, "Could not send it"); setErr(msg); onStay?.(msg); }
     setBusy("");
   };
+  if (asked) return (
+    <Typography variant="body2" sx={{ color: "var(--tq-success, #47654a)", fontWeight: 600 }}>
+      ✓ asked the agent - its card for {to} lands in the task
+    </Typography>
+  );
   if (sent) return (
     <Typography variant="body2" sx={{ color: "var(--tq-success, #47654a)", fontWeight: 600 }}>
       ✓ sent to {(sent.to || []).join(", ") || "the chat"} by {sent.channel}
@@ -82,14 +86,14 @@ export const Handoff = ({ taskId, onSent, onLeave, onStay, said = null }) => {
         {/* the press opens on the one thing to type first (the 2026-10-28 flow walk: a name typed after Hand it to a person went nowhere) */}
         <ContactPicker people={people} value={to} onChange={setTo} onPick={setTo} channel={channel} autoFocus
           placeholder="who should own this — name or email" sx={{ flex: 1, minWidth: 220 }} />
-        <Button size="small" onClick={() => draft()} disabled={!!busy}>
-          {busy === "draft" ? <CircularProgress size={12} /> : text ? label("redraft") : label("redraft", "none")}
+        <Button size="small" onClick={ask} disabled={!!busy || !to.trim()} title="This task's agent writes the forward and puts it up as a card for your Send">
+          {busy === "ask" ? <CircularProgress size={12} /> : label("regular_agent")}
         </Button>
       </Box>
       {usual && to === usual.to && (
         <Typography variant="caption" sx={{ color: FAINT, mt: -0.5 }} data-tq-handoff-usual="">{usualHandWhy(usual)}</Typography>)}
       <TextField multiline minRows={4} size="small" value={text} onChange={(e) => setText(e.target.value)}
-        placeholder="What they need to know. Draft with AI writes it from this task's own context — you edit before it goes." />
+        placeholder="What they need to know - sent as you write it, or the note to the agent when you press Send to agent." />
       <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
         <Button size="small" variant="contained" disableElevation disabled={!!busy || !to.trim() || !text.trim()}
           startIcon={busy === "send" ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <ForwardToInboxIcon sx={{ fontSize: 15 }} />}

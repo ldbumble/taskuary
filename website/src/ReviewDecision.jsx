@@ -24,7 +24,7 @@ import { fmtDateTime } from "./dates.js";
 import { acted, announce, repeatClick, useLit, useVerbs } from "./actionRow.js";
 import { useFoldBar } from "./foldBar.js";
 import { hint as btnHint, label as btn } from "./buttons.js";
-import { boxText, editAfterRefile, heldWords, useDraftJob } from "./replyDraft.js";
+import { boxText, editAfterRefile, heldWords } from "./replyDraft.js";
 import ApprovalInterrupt from "./ApprovalInterrupt.jsx";
 import { interruptOf, resolveInterrupt } from "./approvalInterrupt.js";
 import { draftState, failureHead, failureWhy, replySendFailure, reviewDeliveryState, savedSendFailure, sendFix } from "./sendState.js";
@@ -238,18 +238,9 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   const filedDelivery = delivery.frozen ? { ...r, Deliver: JSON.stringify(delivery.envelope) } : r;
   const proposal = proposalPresentation(r);
   const changedWords = Object.fromEntries((proposal?.texts || []).filter((t) => words2[t.key] != null && words2[t.key] !== t.now).map((t) => [t.key, words2[t.key]]));
-  // A REPLY OPENED AT ONCE is drawn before its draft exists (replyDraft.js, 2026-10-01): "Drafting…" until the model is done,
-  // then the task is read again and the draft is in the box; one that could not be written says why here
-  const jobNow = useDraftJob(r.ReviewId), job = past ? null : jobNow;
-  // A REDRAFT IS NOT A SEND (the email walk, 2026-10-29: Redraft turned Send into "Sending…"): its own state holds every button off
-  // while the model writes, and only Redraft says what is happening
-  const [redrafting, setRedrafting] = useState(false);
-  // ...and one the SERVER is still writing (`Drafting`: the arrival's own) is followed and waited on, not shown as nothing coming (2026-11-03)
-  const drafting = job?.state === "drafting" || redrafting;
   // the signature that goes under this email (signatures.py) is in the box: an empty one opens on it, a draft gets it once - and
   // a box holding only it is still "write the reply first"
-  // ...but while the AI writes it the box is empty under its spinner, reading "Drafting…" - the signature alone read as nothing coming
-  const value = delivery.frozen ? delivery.body : boxText({ text, draft: reviewText(r), drafting, signature: r.Signature });
+  const value = delivery.frozen ? delivery.body : boxText({ text, draft: reviewText(r), signature: r.Signature });
   const words = withoutSignature(value, r.Signature);
   const ccNow = delivery.frozen ? deliveryCc(filedDelivery) : cc ?? deliveryCc(r);
   const bccNow = delivery.frozen ? deliveryBcc(filedDelivery) : bcc ?? deliveryBcc(r);
@@ -341,11 +332,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   const coRid = closeout?.ReviewId || (proposal?.kind === "closeout" ? r.ReviewId : null);
   const { gh, reload: reloadGh, act } = useCloseoutState(past ? null : coRid);
   const blocked = !!gh && !gh.ok;
-  const off = busy || drafting;
-  useEffect(() => {
-    if (job?.state === "done") onChanged?.();
-    if (job?.state === "failed") setErr(`The draft could not be written - ${job.error}. Write it here, or Draft with AI again.`);
-  }, [job]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const off = busy;
 
   // ...the press ASKS ONCE, before anything is posted (the owner, 2026-11-08: Send stays lit): "This still has [ROOM]. Send anyway?" with Send
   // anyway / Cancel under the buttons, the cursor on the first blank. `asked`: the press it holds - replayed as it was, with the text as it is
@@ -478,17 +465,6 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
     setBusy(false);
   };
 
-  const redraft = async (e) => {
-    // ...a double-click is ONE Redraft (the button stress, 2026-11-02): a draft written inside the double-click's 70ms was asked for again
-    if (delivery.frozen || redrafting || repeatClick(no("redraft"), e)) return;
-    announce(no("redraft"));
-    setRedrafting(true);
-    // ...his own press for other words takes his back first (heldEdits.js): no draft is written over words he still holds
-    try { setText(null); await flushEdit(r.ReviewId); await api.post(`/api/reviews/${r.ReviewId}/draft`); onChanged?.(); }
-    catch (e) { setErr(e?.response?.data?.detail || "Redraft failed"); }
-    finally { acted(no("redraft")); setRedrafting(false); }
-  };
-
   // THE DECISION'S VERBS, one list for the card's buttons and the action row: what presses, what it says, when it is off
   const no = (id) => `${r.ReviewId}:${id}`;
   // with the row carrying the item, the dark button is the Advisor's pick on the bar (actionRow.rowOf): the draft's own stay outlined
@@ -525,12 +501,6 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   const rejectTitle = "Dismisses it - nothing runs and nothing is sent";
   const remindTitle = `${btnHint("defer")} - nothing is merged, closed or sent`;
   const doneTitle = `${btnHint("close")} - nothing is sent; the draft stays on it, to send later if you want`;
-  // Redraft (Draft with AI while nothing is drafted): the same handler the in-card button has
-  const canRedraft = !proposal && meta.kind !== "zoho_invoice" && !isCal && !isSlot;   // the redrafter writes a REPLY to the sender
-  const redraftWord = r.DraftText || r.Stale ? btn("redraft") : btn("redraft", "none");
-  const redraftLabel = redrafting && r.DraftText ? "Redrafting…" : drafting ? "Drafting…" : redraftWord;
-  // the Advisor lit Redraft and said why: the warning and its button go over the draft (warnTop), not a line beside the buttons under it
-  const warnTop = !!why && canRedraft && !r.Stale && !delivery.frozen && lit === no("redraft");
   // the alternative (Decline) sends WHAT IS IN THE BOX, edited or not - and with the box empty it just closes the pull request, sending nothing
   const altSends = sendable && !!words.trim();
   const altTitle = co?.alt ? `${co.alt.label} ${co.alt.then}${altSends ? ", then sends the text above exactly as you have it - edit it first if it reads as an accept" : ". The box is empty, so nothing is sent"}.` : "";
@@ -580,8 +550,6 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
       // out message ... mark done is on the tasks"): the draft is there to copy, Redraft beside it, and the task's own Mark done closes
       { id: no("copy"), label: copied ? `✓ ${btn("copy", "done")}` : btn("copy"), tone: "s", disabled: off || !words.trim(), run: copyIt, title: copyTitle,
         why: words.trim() ? "" : "write the reply first" },
-    ] : r.Stale ? [
-      { id: no("approve"), label: redrafting ? "Redrafting…" : drafting ? "Drafting…" : btn("redraft"), tone: "p", disabled: off, run: redraft, title: btnHint("redraft") },
     ] : chatFile ? [
       { id: no("email-file"), label: "Reply by email with the file", tone: "p", disabled: off, run: byEmail,
         title: `A ${r.Channel} message cannot carry a file - the same words and file go as an email to them instead, waiting here for your yes` },
@@ -602,17 +570,13 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
     ...(co || proposal?.kind === "closeout" ? (onRemind ? [{ id: no("remind"), label: btn("defer"), tone: "q", disabled: off, run: onRemind, title: remindTitle }] : [])
       : proposal ? [{ id: no("reject"), label: proposal.rejectLabel, tone: "q", disabled: off, run: () => decide("reject"), title: rejectTitle }]
       // A REPLY DRAFT IS NEVER REJECTED (the owner, 2026-10-01: "rejected is useless - it should be redraft or close task"): Reject
-      // threw the draft away and left the task open, which is neither. Its other choices are Redraft and the task's own Mark done.
-      : [...(canRedraft && !r.Stale ? [{ id: no("redraft"), group: "decide", tone: "s", label: redraftLabel, disabled: off, run: redraft,
-          title: btnHint("redraft") }] : []),
-        ...(onMarkDone && canSendIt ? [{ id: no("done"), group: "decide", closes: true, tone: "s", label: btn("close"), disabled: off, run: onMarkDone, title: doneTitle }] : [])]),
+      // threw the draft away and left the task open, which is neither. Other words for it are his line to its agent (2026-11-27).
+      : [...(onMarkDone && canSendIt ? [{ id: no("done"), group: "decide", closes: true, tone: "s", label: btn("close"), disabled: off, run: onMarkDone, title: doneTitle }] : [])]),
   ].map((v) => ({ ...v, group: "decide", disabled: v.disabled || (delivery.frozen && ![no("approve"), no("anyway"), no("done")].includes(v.id)) }))
     .map((v) => needsTo && [no("approve"), no("send_close"), no("anyway")].includes(v.id) ? { ...v, disabled: true, why: "give the email address first" } : v);
-  // ...and behind More where the decision does not carry it already (a close-out; a stale draft's Refresh is the move itself)
   // The draft's own buttons are drawn under it, never on the task's bar (2026-10-06) - but they are REGISTERED as `card` verbs, so
   // the row knows the card holds the move and the Advisor's Send finds this Send instead of drawing a second one (B4, 2026-10-17)
-  useVerbs(`decision:${r.ReviewId}`, past ? [] : [...moves, ...(canRedraft && moves.length && !moves.some((v) => v.id === no("redraft")) ? [{ id: no("redraft"), group: "more", tone: "s", label: redraftLabel, disabled: off || delivery.frozen, run: redraft,
-    title: btnHint("redraft") }] : [])].map((v) => ({ ...v, card: true })), toRow);
+  useVerbs(`decision:${r.ReviewId}`, past ? [] : moves.map((v) => ({ ...v, card: true })), toRow);
   // A FAILED SEND'S FIX IS A BUTTON ON THE ROW, not directions in the error ("add one under Connections" with nothing to press,
   // 2026-10-17) - and an ordinary row verb, so the Advisor can pick it like any other
   const failure = sendErr || (!busy && !shutErr && savedSendFailure(r)) || null;
@@ -698,19 +662,19 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
       ...(post.body ? [{ key: "post-body", type: "text", value: post.body }] : []),
       ...(pic ? [{ key: "post-picture", type: "picture", value: post.picture, file: pic }] : [])] : []),
     ...(proposal?.folded && !shut ? [{ key: "fold", type: "fold", label: `${cmdOpen ? "Hide" : "Show"} the ${proposal.foldWord || "command"}`, open: cmdOpen, onToggle: () => setCmdOpen((o) => !o) }] : []),
-    // ...the words, the card's own box: while the AI writes it, its spinner IN the box (the owner, 2026-10-30: "spin in the box of drafting")
+    // ...the words, the card's own box
     // ...AND THE VERSIONS ITS AGENT GAVE OF IT ARE A PICK ON THIS ONE CARD (versionsOf; walk 22, 2026-11-25: "Yes - Thursday" and "No - keep Friday"
     // stood as one card holding only the last): the one picked fills the box, his to change, and Send sends the box
     ...(!shut && !proposal ? versionPick(versionsOf(r), value, !(off || delivery.frozen), setText) : []),
     ...(proposal?.asks ? [] : shut ? (sp?.text || (over && (r.FinalText || r.DraftText)) ? [{ key: "draft", type: "text", value: sp?.text || String(r.FinalText || r.DraftText).slice(0, 500), clamp: true, dim: over }] : [])
       : [{ key: "draft", type: "text", box: true, label: "Reply draft", value, ...(proposal?.was != null ? { type: "change", label: "The skill will say", was: proposal.was, marks: marksOn } : {}), editable: !(off || delivery.frozen || proposal?.readOnly), onChange: (v) => setText(v), marks: blanks,
-        spin: drafting, boxRef: draftRef, hidden: (proposal?.folded && !cmdOpen) || proposal?.bare,
-        placeholder: proposal?.kind === "closeout" ? proposal.placeholder : isCal ? "A note with your answer - or leave it empty" : drafting ? "Drafting…" : r.DraftText ? "" : proposal ? "Proposal details unavailable" : "No draft yet — write the reply here" },
+        boxRef: draftRef, hidden: (proposal?.folded && !cmdOpen) || proposal?.bare,
+        placeholder: proposal?.kind === "closeout" ? proposal.placeholder : isCal ? "A note with your answer - or leave it empty" : r.DraftText ? "" : proposal ? "Proposal details unavailable" : "No draft yet — write the reply here" },
         // ...and a skill's page, the same switch under it (a new one against nothing: all of it added)
         ...(proposal?.was != null ? [marksFold] : [])]),
   ];
   // ...its press row, the moves the action row registers (one list, `moves`): what the card itself draws of them, and an invite's other answers
-  const presses = shut ? [] : [...moves.filter((v) => !v.closes && !(v.id === no("redraft") && (warnTop || delivery.frozen)))
+  const presses = shut ? [] : [...moves.filter((v) => !v.closes)
     .map((v) => ({ ...v, spin: busy && /…$/.test(String(v.label)), tone: v.id === no("reject") ? "x" : v.tone,
       ...(v.id === no("approve") && paired ? { hidden: folded, attrs: { "data-tq-bar-item": "send", "data-tq-send": "open" } } : v.id === no("send_close") ? { attrs: { "data-tq-send": "close" } } : {}) })),
     ...calOthers.map(([a, w]) => ({ id: `cal:${a}`, label: switching === a ? "Setting up…" : w, tone: "s", disabled: off || !!switching, run: () => answerInstead(a), title: calTitle(w, a),
@@ -726,7 +690,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
       barRef={setMoves} nowrap={paired} {...(paired ? { "data-tq-two-sends": folded ? "folded" : "both" } : {})}
       tail={!shut && <>{foldMore(pairSend)}
         {/* WHY IT IS LIT, BESIDE IT (the owner, 2026-10-28): the Advisor's reason, said where its button is lit */}
-        {why && !warnTop && String(lit || "").startsWith(`${r.ReviewId}:`) && <Typography component="span" data-tq-lit-why="" variant="body2"
+        {why && String(lit || "").startsWith(`${r.ReviewId}:`) && <Typography component="span" data-tq-lit-why="" variant="body2"
           sx={{ alignSelf: "center", color: "var(--tq-link, #55697a)", fontSize: 12.5, minWidth: 0, overflowWrap: "anywhere" }}>{why}</Typography>}</>}
       before={!shut && <>
         {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1 }}>{err}</Alert>}
@@ -743,19 +707,14 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
         {meta.kind === "zoho_invoice" && <InvoiceLine meta={meta} />}
         {/* !!: the task detail carries the raw row, where Stale is the NUMBER 0 - and React draws a 0 */}
         {!!r.Stale && !delivery.frozen && <Alert severity="warning" sx={{ mb: 1 }}>
-          New messages arrived after this draft. Refresh the draft before sending it.
+          New messages arrived after this draft - read them before you send it.
           {r.LatestPreview && <Box sx={{ mt: 0.5, fontSize: 11.5 }}>Latest: {r.LatestPreview}</Box>}</Alert>}
         {/* a draft the writer could not write, or one that came back empty, says so plainly (the owner, 2026-11-03) */}
-        {!proposal && !drafting && !err && ["needs", "failed", "empty", "kept"].includes(draftState(r).state) && !!draftState(r).line &&
+        {!proposal && !err && ["needs", "failed", "empty", "kept"].includes(draftState(r).state) && !!draftState(r).line &&
           <Typography variant="body2" data-tq-draft-needs="" sx={{ color: DIM, mb: 1 }}>{draftState(r).line}</Typography>}
         {!proposal && <Inbound r={r} />}
         {meta.share?.report != null && <SharedDashboard report={meta.share.report} title={meta.share.title} />}
-        {/* THE WARNING SITS OVER THE DRAFT IT IS ABOUT, ITS REDRAFT IN IT (the owner, 2026-10-28) */}
-        {warnTop && <Box data-tq-redraft-warn="" sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mb: 0.75, px: 1.25, py: 0.75,
-          border: "1px solid var(--tq-edge-brass, #e3c9a8)", bgcolor: "var(--tq-panel, #fbf3e8)", borderRadius: 1.5 }}>
-          <Typography component="span" data-tq-lit-why="" sx={{ flex: "1 1 220px", minWidth: 0, color: "var(--tq-warning, #6b4a1f)", fontSize: 13, overflowWrap: "anywhere" }}>{why}</Typography>
-          <Button size="small" variant="contained" disableElevation disabled={off} onClick={redraft} title={btnHint("redraft")}>{redraftLabel}</Button>
-        </Box>}</>}
+</>}
       files={!proposal && !isCal && (!shut || deliveryFiles(filedDelivery).length > 0) && <ReplyFiles reviewId={r.ReviewId} files={deliveryFiles(filedDelivery)} promised={filesPromised(r)} short={filesShort(filedDelivery, deliveryFiles(filedDelivery))}
         channel={r.Channel} onChanged={onChanged} toRow={toRow} disabled={off || delivery.frozen || shut} over={shut} />}
       under={shut ? done?.command && <details><summary style={{ fontSize: 12, color: DIM, cursor: "pointer" }}>What it runs</summary>
@@ -792,7 +751,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
       {!shut && compare?.reviewId === r.ReviewId && <Box sx={{ mt: 0.75, border: "1px solid var(--tq-border, #d2d6cf)", borderRadius: 1.5, px: 1.25, py: 0.75, bgcolor: PANEL2 }}>
         <Typography variant="caption" sx={{ color: "var(--tq-success, #6f8a6e)", fontWeight: 600, display: "block" }}>
           Refreshed draft - written after the new message. Your edit stays in the box above.</Typography>
-        <Typography variant="body2" sx={{ color: INK, whiteSpace: "pre-wrap", fontSize: 12.5, mt: 0.5 }}>{compare.refreshed || "(no refreshed draft - hit Redraft)"}</Typography>
+        <Typography variant="body2" sx={{ color: INK, whiteSpace: "pre-wrap", fontSize: 12.5, mt: 0.5 }}>{compare.refreshed || "(no refreshed draft)"}</Typography>
         <Box sx={{ display: "flex", gap: 0.75, mt: 0.75 }}>
           <Button size="small" variant="outlined" disabled={off || delivery.frozen || !compare.refreshed} onClick={() => { setText(compare.refreshed); setCompare(null); }}>Use the refreshed draft</Button>
           <Button size="small" sx={{ color: DIM }} onClick={() => setCompare(null)}>Keep mine</Button>

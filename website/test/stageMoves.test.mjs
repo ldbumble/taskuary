@@ -12,7 +12,7 @@ const task = [v("reply", "decide", { tone: "p", label: "Reply", spine: "Draft re
 
 test("each move's pane: the agent's, the reply's and the hand-off, where it came from - nothing of the task's own", () => {
   assert.deepEqual(task.map((x) => stageOf(x)), ["agent", "agent", "", "agent", "", "from", "from", "", "", ""]);
-  assert.equal(stageOf(v("r12:redraft", "decide", { card: true })), "agent", "a draft's own Redraft is the chat's");
+  assert.equal(stageOf(v("r12:accept_invite", "decide", { card: true })), "agent", "an invite's own answer is the chat's");
   assert.equal(stageOf(v("save-end", "agent")), "", "Stop and save stays on the bar");
   assert.equal(stageOf(v("continue", "agent")), "agent");
   assert.equal(stageOf(v("run-another", "agent")), "agent");

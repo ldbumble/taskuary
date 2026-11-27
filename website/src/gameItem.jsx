@@ -10,7 +10,7 @@ import { Box, Typography } from "@mui/material";
 import api from "./api";
 import { press, sure } from "./press.js";
 import { hisText } from "./heldEdits.js";
-import { openReply, useDraftJob } from "./replyDraft.js";
+import { askReply } from "./replyDraft.js";
 import { mono } from "./theme.jsx";
 import { cleanText } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
@@ -124,12 +124,6 @@ function Draft({ item, busy, play }) {
   const load = () => api.get("/api/reviews", { params: { status: "pending" } })
     .then(({ data }) => setRv((data.data || []).find((x) => x.ReviewId === item.rid) || { gone: true })).catch((e) => setErr(errText(e)));
   useEffect(() => { load(); }, [item.rid]);
-  // A REPLY OPENED AT ONCE (replyDraft.js, 2026-10-01): the box is here before its draft - "Drafting…" until it lands, then it fills
-  const job = useDraftJob(item.rid), drafting = job?.state === "drafting";
-  useEffect(() => {
-    if (job?.state === "done") setRv((r) => (r && !r.gone ? { ...r, DraftText: job.draft } : r));
-    if (job?.state === "failed") setErr(`The draft could not be written - ${job.error}. Write it here, or redraft.`);
-  }, [job]);
   if (!rv) return <Typography sx={{ fontSize: 11.5, color: G.faint, mt: 0.6 }}>fetching the draft…</Typography>;
   if (rv.gone) return <Typography sx={{ fontSize: 11.5, color: G.faint, mt: 0.6 }}>Already handled - nothing is waiting here.</Typography>;
   const action = rv.Kind === "action";
@@ -141,17 +135,17 @@ function Draft({ item, busy, play }) {
   const send = () => play("approve", item.key, async () => {
     return sure(await press(api, item.rid, { verb: "approve", final_text: action ? null : value }, action ? 2 : 1), "sent");      // the one press (press.js)
   });
+  // other words for it are his ask to the task's agent, which raises its new card (replyDraft.askReply, the owner 2026-11-27)
   const redraft = async () => {
-    const out = await play("draft", null, async () => (await api.post(`/api/messages/${item.mid}/reply`,
-      { draft: true, redraft: true, instruction: how.trim() || null })).data);
-    if (out) { setHow(""); setText(null); if (out.draft) setRv((r) => ({ ...r, DraftText: out.draft, Stale: false })); else load(); }
+    const out = await play("draft", null, () => askReply(api, item.mid, how.trim() || null, "redraft"));
+    if (out) setHow("");
   };
   return (
     <Box onClick={(e) => e.stopPropagation()}>
       <Label>{co ? "THE AGENT FINISHED - WHAT CLOSES IT" : action ? "WHAT THE AGENT WANTS TO DO" : `THE DRAFT TO ${who.toUpperCase()} - EDIT, THEN SEND`}</Label>
       <Box component="textarea" rows={5} value={value} readOnly={action} onChange={(e) => setText(e.target.value)}
-        placeholder={drafting ? "Drafting… it fills in here when the AI is done - or type your own" : "No draft yet - rewrite it below, or type your own"} sx={field} />
-      {!!(rv.Stale ?? item.stale) && <Typography sx={{ fontSize: 11.5, color: G.gold, mt: 0.4 }}>New messages came in after this draft - rewrite it before sending.</Typography>}
+        placeholder="No draft yet - ask its agent below, or type your own" sx={field} />
+      {!!(rv.Stale ?? item.stale) && <Typography sx={{ fontSize: 11.5, color: G.gold, mt: 0.4 }}>New messages came in after this draft - read them before sending.</Typography>}
       <Row>
         <Btn kind="gold" disabled={!!busy || (!action && !value.trim())} onClick={send} title={co ? `${co.label} - ${co.then}` : action ? "Runs what the agent proposed" : `Sends it to ${who}`}>
           {co || action ? `✔ ${btn("approve", "action")} · +40` : `✔ ${btn("approve")} · +40`}</Btn>
@@ -164,7 +158,7 @@ function Draft({ item, busy, play }) {
         <Box sx={{ display: "flex", gap: 0.5, mt: 0.8 }}>
           <Box component="input" value={how} onChange={(e) => setHow(e.target.value)} placeholder="Rewrite it… (shorter, warmer, say no)"
             onKeyDown={(e) => { if (e.key === "Enter") redraft(); }} sx={{ ...field, py: 0.6 }} />
-          <Btn disabled={!!busy || drafting} onClick={redraft} title="Taskuary rewrites the draft - nothing is sent">{drafting ? "Drafting…" : "✍ Redraft"}</Btn>
+          <Btn disabled={!!busy} onClick={redraft} title="Asks the task's agent to write it again - nothing is sent">✍ {btn("redraft")}</Btn>
         </Box>
       </>}
       {err && <Typography sx={{ fontSize: 11.5, color: G.red, mt: 0.5 }}>{err}</Typography>}
@@ -219,10 +213,8 @@ export function Moves({ item, covers = [], busy, play, onRepo, onAgent, given = 
     if (c.verb === "continue" && item.tid) return play("dispatch", item.key, () => api.post(`/api/tasks/${item.tid}/continue-work`, { note: null }));
     // ...and a hand-off opens the agent box first: what to do, which agent - nothing starts at the press (the owner, 2026-10-23)
     if (AGENT_VERBS.includes(c.verb) && onAgent) { onAgent(c.verb); return null; }
-    // a fresh reply opens at once and its draft fills in behind it (replyDraft.js, 2026-10-01); a redraft rewrites the one there
-    if (c.verb === "reply" && item.mid) return play("draft", null, () => openReply(api, item.mid));
-    if (c.verb === "redraft" && item.mid)
-      return play("draft", null, () => api.post(`/api/messages/${item.mid}/reply`, { draft: true, redraft: true, instruction: null }));
+    // a reply or a rewrite is his ask to the task's agent (replyDraft.askReply, the owner 2026-11-27)
+    if ((c.verb === "reply" || c.verb === "redraft") && item.mid) return play("draft", null, () => askReply(api, item.mid, null, c.verb));
     const p = await play(null, null, async () => (await api.post("/api/concierge/propose", { verb: c.verb, key: item.key, table: true })).data);
     if (!p) return null;
     const got = proposalOf({ proposal: p }) || p;
@@ -278,7 +270,7 @@ export function ItemInspector({ item, agents, busy, play, onOpenTask, onNavigate
   const dispatch = (o) => { setAsk(null); setLast(o); return play("dispatch", item.key, () => handOver(item, o, setRepo)); };
   // the owner's own words are what goes: the box is opened without a draft the model would only write to be thrown away
   const sendMine = () => play("approve", item.key, async () => {
-    const { data } = await api.post(`/api/messages/${item.mid}/reply`, { draft: false });
+    const { data } = await api.post(`/api/messages/${item.mid}/reply`, { write: true });
     if (!data?.reviewId) throw new Error("no draft slot came back - try Draft a reply");
     return sure(await press(api, data.reviewId, { verb: "approve", final_text: mine }), "sent");
   });
@@ -297,7 +289,7 @@ export function ItemInspector({ item, agents, busy, play, onOpenTask, onNavigate
       <Typography sx={{ fontSize: 11, color: G.faint, mt: 0.5 }}>Once it answers again this clears by itself.</Typography>
     </>;
   } else if (card === "reply") {
-    covers = ["approve", "redraft"];
+    covers = ["approve"];
     body = <>{item.mid && <MessageText mid={item.mid} />}<Draft item={item} busy={busy} play={play} /></>;
   } else if (card === "agent") {
     covers = ["answer_agent"];
@@ -344,8 +336,8 @@ export function ItemInspector({ item, agents, busy, play, onOpenTask, onNavigate
       {item.summary && <Reading text={item.summary} cap={100} />}
       {item.tid && <FinalReport tid={item.tid} />}
       <Row>
-        {card === "agentdone" && item.mid && item.replies && <Btn kind="gold" disabled={!!busy} onClick={() => play("draft", item.key, () => openReply(api, item.mid))}
-          title="Drafts an answer to the sender from what the agent found - nothing is sent">✍ {btn("reply")} · +20</Btn>}
+        {card === "agentdone" && item.mid && item.replies && <Btn kind="gold" disabled={!!busy} onClick={() => play("draft", item.key, () => askReply(api, item.mid))}
+          title="Asks the agent to answer the sender from what it found - nothing is sent">✍ {btn("reply")} · +20</Btn>}
         {item.tid && <Btn onClick={() => open(item.tid)}>Open {item.ref}</Btn>}
       </Row>
     </>;
@@ -367,7 +359,7 @@ export function ItemInspector({ item, agents, busy, play, onOpenTask, onNavigate
       {item.lane === "unjudged" && <Row><Btn kind="gold" disabled={!!busy} onClick={() => play("sort", item.key, () => api.post(`/api/messages/${item.mid}/retriage`, {}))}>🔁 {btn("retriage")} · +10</Btn></Row>}
       {asks && item.mid && <Row>
         {/* ...a reply only where somebody reads one (the server's `replies`, 2026-11-10) */}
-        {item.replies && <Btn kind={m.verb === "draft" ? "gold" : "ghost"} disabled={!!busy} onClick={() => play("draft", item.key, () => openReply(api, item.mid))}>✍ {btn("reply")} · +20</Btn>}
+        {item.replies && <Btn kind={m.verb === "draft" ? "gold" : "ghost"} disabled={!!busy} onClick={() => play("draft", item.key, () => askReply(api, item.mid))}>✍ {btn("reply")} · +20</Btn>}
         {/* not while an agent runs on it - its session is the way in (2026-10-01) */}
         {!agentRuns(item) && <Btn kind={m.verb === "dispatch" ? "gold" : "ghost"} disabled={!!busy} onClick={() => setAsk(coding)}>🤖 {btn(coding ? "coding_agent" : "regular_agent")} · +45</Btn>}
         <Btn disabled={!!busy} onClick={() => setMine((v) => v == null ? "" : null)}>✎ Write it myself</Btn>

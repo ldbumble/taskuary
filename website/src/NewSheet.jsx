@@ -205,7 +205,6 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   const [cc, setCc] = useState([]);
   const [hasAbout, setHasAbout] = useState(false);
   const aboutRef = useRef(null);
-  const [mode, setMode] = useState("draft");
   const pics = usePromptImages({ files: true });          // ...a pasted, dropped or picked file of any kind, as every box takes (2026-11-16)
   // agent
   // NOTHING THAT MUST BE PICKED (the owner, TQ-1397: "you ask the agent what you need and it should do it ... never, ever be stuck on a repo
@@ -290,11 +289,10 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
       if (kind === "send") {
         const { data } = await api.post("/api/outbox", {
           channel, to: channel === "email" ? emailTo : to.trim(),
-          cc: channel === "email" ? cc : [], about, files: pics.paths, mode,
+          cc: channel === "email" ? cc : [], about, files: pics.paths,
         });
-        setOk(mode === "task"
-          ? `${data.ref} — an agent is finding out first; the message is drafted when it is done.`
-          : `${data.ref} — drafted. It is open now, waiting for you to send it.`);
+        // ...its agent writes it and raises its card for his Send (outbox.compose, the owner 2026-11-27)
+        setOk(data.asked ? `${data.ref} — its agent is writing it; its card waits for your Send.` : `${data.ref} — made, but its agent could not be started.`);
         aboutRef.current?.clear(); setHasAbout(false); pics.clear(); onDone?.(); openIt(data.taskId);
       } else if (kind === "agent") {
         // one module decides chat-vs-terminal for the whole app, so the Board and this sheet can
@@ -364,13 +362,13 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
       }
     } catch (e) { setErr(e?.response?.data?.detail || "That did not go through"); }
     if (!(inline && opened)) setBusy(false);
-  }, [kind, channel, to, emailTo, cc, mode, how, when, by, who, plan, noAi, noPlanner, onDone, onOpenTask, onClose, pics, line, inline]);
+  }, [kind, channel, to, emailTo, cc, how, when, by, who, plan, noAi, noPlanner, onDone, onOpenTask, onClose, pics, line, inline]);
 
   // ...and no live session without a coding tool the owner chose (owner-approved, 2026-10-21): Send to coding agent stays disabled
   const noCodingTool = kind === "agent" && how === "terminal" && (!agentsRead || !codingReady);
   const canGo = hasWords({ agentBox, words, field: hasAbout }) && !noCodingTool && (kind !== "send" || (channel && (channel === "email" ? emailTo.length : to.trim())));
   // a hand-off is the one Send to agent / Send to coding agent (buttons.json); the others are this form's own words
-  const verb = kind === "send" ? (mode === "task" ? btn("regular_agent") : "Draft it")
+  const verb = kind === "send" ? btn("regular_agent")
     : kind === "agent" ? btn(how === "general" ? "regular_agent" : "coding_agent") : kind === "goal" ? (plan ? "Plan it" : "Track it")
     : kind === "skill" ? "Set up with AI" : kind === "chat" ? "Go" : "Note it";
 
@@ -493,18 +491,6 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
             </Typography>
           )}
         </Box>}
-
-        {kind === "send" && (
-          <Box>
-            <Label>And then</Label>
-            <Box sx={{ display: "flex", gap: 1 }}>
-              <Fork on={mode === "draft"} onClick={() => setMode("draft")} title="Draft it and show me"
-                hint="written in your voice from the thread. It opens for you as 🏁 ready to send - sending it leaves the task open." />
-              <Fork on={mode === "task"} onClick={() => setMode("task")} title="Find out first"
-                hint="an agent researches it, then drafts the message from what it actually found." />
-            </Box>
-          </Box>
-        )}
 
         {kind === "goal" && (
           <>

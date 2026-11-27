@@ -83,7 +83,7 @@ test("the day typed with Remind me rides the light into the picker as its first 
 });
 
 // HAND IT TO A PERSON, ASKED FOR IN WORDS (the owner, 2026-11-03: "This should be sent to <an address>" did nothing): the light carries who
-// and a note, the task view opens the form with them in it, and the form drafts the forward at once - Send is still the owner's press.
+// and a note, the task view opens the form with them in it - Send is still the owner's press.
 test("the person and note typed with Hand it to a person ride the light into its form", () => {
   const hand = { to: "gail@vendor.example", note: "Yours from here." };
   const l = lightOf({ verb: "forward", label: "Hand it to a person", key: "msg:5", tid: 31, hand });
@@ -96,7 +96,8 @@ test("the person and note typed with Hand it to a person ride the light into its
   assert.equal((src("TaskPage.jsx").match(/<Handoff key=\{handSaid \? [^\n]+? taskId=\{selected\} said=\{handSaid\} /g) || []).length, 2, "both of its places");
   const form = src("Handoff.jsx");
   assert.match(form, /useState\(said\?\.to \|\| ""\)/);
-  assert.match(form, /useEffect\(\(\) => \{ if \(said\?\.to\) draft\(said\.to\); \}, \[\]\);/, "drafted when it opens");
-  const opens = form.slice(form.indexOf("const draft = async"), form.indexOf("const send = async"));
-  assert.match(opens, /draft_only: true/); assert.doesNotMatch(opens, /send\(/, "never sent by itself");
+  assert.match(form, /useState\(said\?\.note \|\| ""\)/, "his note in the box when it opens");
+  // ...and no writer behind it (the owner, 2026-11-27): Send to agent is his ask to the task's agent, never sent by itself
+  const opens = form.slice(form.indexOf("const ask = async"), form.indexOf("const send = async"));
+  assert.match(opens, /ask: true/); assert.doesNotMatch(opens, /send\(|draft_only/);
 });

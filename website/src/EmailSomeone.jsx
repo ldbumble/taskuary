@@ -1,9 +1,9 @@
 // EMAIL A SUMMARY - one of Share's ways since 2026-10-23 (Share.jsx), and a chat reply's "by email with the file" - from inside a task - whoever started it (the owner, 2026-10-09: "even though i started it from the new button
 // i want to be able to create email to send to someone and notify it's done ... choose sender/attachments/draft message with
 // ai"; then "add from mailbox picker and teams/chat too"). An email - From, To, CC, which of the task's files ride on it - or a
-// chat message into one chat; and what it should say. The AI writes it from those words AND what the work found
-// (outbox.task_email). It waits in Close out as one of the task's outputs - edit it, attach more, Send - and the task
-// stays open until Mark done (slots._left). Nothing is sent from here.
+// chat message into one chat; and what it should say. All of it is his ask to the task's agent (server.task_email, the owner
+// 2026-11-27: "side model should never work in agent canvas"): the agent writes it from those words and the work, and raises its
+// card for his Send. Nothing is sent from here.
 import React, { useEffect, useState } from "react";
 import { Box, Button, Checkbox, CircularProgress, Dialog, DialogContent, DialogTitle, FormControlLabel,
   MenuItem, Select, TextField, Typography } from "@mui/material";
@@ -68,7 +68,7 @@ export default function EmailSomeone({ open, task, detail, onClose, onDrafted })
         ? { channel, to: to[0], cc, about, mailbox: from || null, attach: files.filter((f) => picked.has(f.key)).map(({ kind, id, path }) => (kind === "output" ? { kind, path } : { kind, id })) }
         : { channel, to: chat.to, name: chat.name || "", about });
       onDrafted?.();
-    } catch (e) { setErr(e?.response?.data?.detail || "Could not draft it"); }
+    } catch (e) { setErr(e?.response?.data?.detail || "Could not ask the agent"); }
     finally { setBusy(false); }
   };
   return (
@@ -76,8 +76,8 @@ export default function EmailSomeone({ open, task, detail, onClose, onDrafted })
       <DialogTitle>{label("share")} · {detail?.ref || ""}</DialogTitle>
       <DialogContent sx={{ pt: "8px !important", display: "flex", flexDirection: "column", gap: 1.6 }}>
         <Typography variant="body2" sx={{ color: DIM }}>
-          The AI writes a short summary of what this task's work delivered, for the person you pick. It waits in the task's chat for you
-          to edit and send - nothing is sent now. Sending it leaves the task open until you Mark done.
+          This task's agent writes a short summary of what its work delivered, for the person you pick, and puts it up as a card in the
+          task's chat for you to edit and send - nothing is sent now. Sending it leaves the task open until you Mark done.
         </Typography>
         {targets.length > 1 && (
           <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap" }}>
@@ -134,7 +134,7 @@ export default function EmailSomeone({ open, task, detail, onClose, onDrafted })
       </DialogContent>
       <ButtonBar>
         <Button variant="contained" disableElevation onClick={go} disabled={busy || !ready}>
-          {busy ? <CircularProgress size={15} /> : label("redraft", "none")}
+          {busy ? <CircularProgress size={15} /> : label("regular_agent")}
         </Button>
         <Button onClick={onClose} disabled={busy}>Cancel</Button>
       </ButtonBar>

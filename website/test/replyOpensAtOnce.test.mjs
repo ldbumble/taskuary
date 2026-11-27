@@ -1,73 +1,33 @@
-// REPLY OPENS AT ONCE (the owner, 2026-10-01: "Reply opens at once with "Drafting…" and the draft fills in - never waits on
-// the AI"). Every Reply press asked the server to write the draft before it answered, so the card came up only when the model
-// was done - a blank wait of however long the model took. The box opens now (`later`), and the draft is asked for behind it.
+// A REPLY IS THE TASK'S AGENT'S (the owner, 2026-11-27: "side model should never work in agent canvas"): Reply, Redraft and the Assistant's
+// "reply to X" were a one-shot writer drafting behind the card (/api/reviews/{rid}/draft). The press is now one call - his ask to the
+// task's agent (server.open_reply) - and nothing is drafted behind it.
 import test from "node:test";
 import assert from "node:assert/strict";
 
 
 import { withSignature } from "../src/signature.js";
-import { boxText, draftJob, openReply, subscribeDrafts } from "../src/replyDraft.js";
+import * as replyDraft from "../src/replyDraft.js";
+import { askReply, boxText } from "../src/replyDraft.js";
 
 
-const fakeApi = (draft) => {
+const fakeApi = () => {
   const calls = [];
-  let release;
-  const held = new Promise((r) => { release = r; });
-  return { calls, release, post: async (url, body) => {
-    calls.push([url, body]);
-    if (url.includes("/messages/")) return { data: { reviewId: 41, taskId: 7, draft: "", drafting: true } };
-    await held;
-    if (draft instanceof Error) throw Object.assign(draft, { response: { data: { detail: draft.message } } });
-    return { data: { ok: true, draft } };
-  } };
+  return { calls, post: async (url, body) => { calls.push([url, body]); return { data: { taskId: 7, ref: "TQ-0007", asked: true, receipt: { status: "done", text: "Asked the agent on TQ-0007." } } }; } };
 };
 
-test("the box opens before the model answers, says Drafting, and fills in when it does", async () => {
-  const api = fakeApi("Yes, Tuesday works.");
-  let woke = 0; const off = subscribeDrafts(() => { woke += 1; });
-  const opened = await openReply(api, 9, "say yes");
-  assert.equal(opened.reviewId, 41, "the card can be drawn now");
-  assert.deepEqual(api.calls[0], ["/api/messages/9/reply", { draft: true, later: true, instruction: "say yes" }]);
-  // ...and the people to loop in ride along only when there are some (the reply's CC, 2026-10-13)
-  await openReply(api, 9, "ask her", ["Gail"]);
-  assert.deepEqual(api.calls.at(-1), ["/api/messages/9/reply", { draft: true, later: true, instruction: "ask her", cc: ["Gail"] }]);
-  assert.deepEqual(api.calls[1], ["/api/reviews/41/draft", { instruction: "say yes" }], "the draft is asked for behind it, with the owner's words");
-  assert.equal(draftJob(41).state, "drafting");
-  api.release(); await draftJob(41).promise;
-  assert.deepEqual([draftJob(41).state, draftJob(41).draft], ["done", "Yes, Tuesday works."]);
-  assert.ok(woke >= 2, "the card hears both");
-  off();
+test("Reply and Redraft are one call: his ask to the task's agent, nothing drafted behind it", async () => {
+  const api = fakeApi();
+  const out = await askReply(api, 9, "say yes");
+  assert.equal(out.taskId, 7);
+  await askReply(api, 9, null, "redraft", 77);
+  assert.deepEqual(api.calls, [["/api/messages/9/reply", { instruction: "say yes", verb: "reply" }],
+                               ["/api/messages/9/reply", { instruction: null, verb: "redraft", line: 77 }]], "never a /draft behind it");
+  for (const gone of ["openReply", "draftBehind", "draftJob", "useDraftJob", "rewriteReceipt"]) assert.equal(replyDraft[gone], undefined, gone);
 });
 
-// THE ASSISTANT'S "Drafting a reply" LINE IS UNDER WAY (the owner, 2026-11-04: "it says it's doing things and it does not do them"): its id
-// rides the press to /reply and /draft, which say it again with how it went, and the job keeps the server's receipt for the chat to draw
-test("the Assistant's under-way line rides the draft, and the server's receipt is kept", async () => {
-  const api = fakeApi("Yes, Tuesday works.");
-  api.post = ((post) => async (url, body) => { const r = await post(url, body); return url.endsWith("/draft")
-    ? { data: { ...r.data, receipt: { status: "done", text: "Drafted a reply on TQ-0009." } } } : r; })(api.post);
-  await openReply(api, 9, "say yes", null, false, 77);
-  assert.deepEqual(api.calls.at(-2), ["/api/messages/9/reply", { draft: true, later: true, instruction: "say yes", line: 77 }]);
-  assert.deepEqual(api.calls.at(-1), ["/api/reviews/41/draft", { instruction: "say yes", line: 77 }]);
-  api.release(); await draftJob(41).promise;
-  assert.deepEqual(draftJob(41).receipt, { status: "done", text: "Drafted a reply on TQ-0009." });
-});
-
-test("a draft that fails says why in the card", async () => {
-  const api = fakeApi(new Error("no AI connector is set up to write replies"));
-  await openReply(api, 10);
-  api.release(); await draftJob(41).promise;
-  assert.equal(draftJob(41).state, "failed");
-  assert.match(draftJob(41).error, /no AI connector/);
-});
-
-
-// "IT STARTS WITH CIRCLING, THEN OPENS THIS? AND THEN SOMETIMES IT JUST FILLS OUT THE TEXT 10 SECONDS LATER" (the owner, 2026-11-03): a draft
-// the server is still writing (the review's `Drafting`: the arrival's own) showed a signature-only box under Draft with AI, as if nothing
-// were coming. The card follows that draft - /draft waits on the one under way - and the box reads Drafting until it lands.
-test("the box of a draft being written is empty, never the signature alone", () => {
+test("the box holds the owner's words over the draft, and the signature under an empty one", () => {
   const sign = "Alex Doyle\nNorthwind";
-  assert.equal(boxText({ text: null, draft: "", drafting: true, signature: sign }), "", "empty while it is written, so the box says Drafting");
-  assert.equal(boxText({ text: null, draft: "", drafting: false, signature: sign }), withSignature("", sign), "nothing coming: the signature to write over");
-  assert.equal(boxText({ text: null, draft: "Yes.", drafting: true, signature: sign }), withSignature("Yes.", sign), "a redraft keeps the draft there in view");
-  assert.equal(boxText({ text: "my own words", draft: "", drafting: true, signature: sign }), "my own words", "the owner's edit is never wiped");
+  assert.equal(boxText({ text: null, draft: "", signature: sign }), withSignature("", sign), "nothing drafted: the signature to write over");
+  assert.equal(boxText({ text: null, draft: "Yes.", signature: sign }), withSignature("Yes.", sign));
+  assert.equal(boxText({ text: "my own words", draft: "Yes.", signature: sign }), "my own words", "the owner's edit is never wiped");
 });

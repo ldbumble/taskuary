@@ -2,6 +2,15 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.6.11 - 2026-11-27
+
+- An invitation is a task unless it is spam
+- A task moved to another profile answers from that profile's mailbox
+- A reply owed with no words is never a card: it is the task's state
+- The page draws a reply card only once its agent has written it
+- Codex and claude coding agents run only over ACP: the switch and the terminal fallback go
+- Docs and walk scripts drop the ACP switch and the pty road for coding tasks
+
 ## 0.4.6.10 - 2026-11-27
 
 - The show tool's listed line says a view shown again under its id is the one view redrawn

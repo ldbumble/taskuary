@@ -2,6 +2,25 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.6.13 - 2026-11-27
+
+- Versions of one thing are their own field: one card, his pick goes
+- A reply's cc adds to the thread's copies; only narrows to the sender and those named
+- Card tools: to is a list, a letter is new unless it replaces, ticks wait for the press, one take-back tool
+- A post card's one press is the yes for its site's Post
+- The post road makes a video the MP4 its network takes
+- A file shown can carry its own title, in one hand-over
+- A letter from his other profile's mailbox is one card; his one press moves the task and sends
+- Card tools carry their meaning in their shape: git, routine, system, meeting
+- An invite set up from who can make which times draws that grid
+- Locked rules 3 and 9: after_press, and run_system's writes on the one card road
+- Reply on an FYI opens his own reply box on it: no agent, no task
+- A permission asked is never a step of its own
+- A turn that showed a view is not said again by its summary
+- A file of the task's folder shown in a turn at work is drawn once, never first as a copy
+- An agent's launcher draws no splash over the owner's screen
+- Fit the three card-tool groups together: tool budget, LOCK, tests
+
 ## 0.4.6.12 - 2026-11-27
 
 - Delete the task page's pre-chat code: start form, Continue, Run another, strong re-run

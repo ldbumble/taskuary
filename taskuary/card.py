@@ -400,12 +400,16 @@ def _todos(store, rid) -> set:
 
 
 # ...AND A TICK MADE BESIDE A CARD THAT WAITS IS THAT CARD'S (the card-tool design, 2026-11-27, the owner's OK; walks 25-26: an agent raised the
-# post and ticked "post on X" at once, and the task read done while nothing had gone): the to-do is tied to the cards its turn raised that
-# still wait, ticked by `went` as his press goes - never by his no
+# post and ticked "post on X" at once, and the task read done while nothing had gone): ticked by `went` as that card's press goes, never by his
+# no. ONE card, not the turn's every card (a turn of two letters: his no on one and Send on the other ticked it) - the one whose `todo` names
+# it, else the newest raised beside it (with its bulk rows, one card)
 def tie(store, tid, todo: str, since: float) -> list:
-    "The cards raised on task `tid` since `since` (epoch) that still wait, each now doing to-do `todo`: their ids, [] for none."
+    "The card raised on task `tid` since `since` (epoch) that still waits and does to-do `todo`: its rows' ids, [] for none."
     at = datetime.fromtimestamp(int(since)).isoformat(sep=' ', timespec='seconds')
-    rids = [r['ReviewId'] for r in store._rows("SELECT ReviewId FROM review WHERE TaskId=? AND Status IN ('pending','held') AND CreatedAt>=?", (int(tid), at))]
+    rows = store._rows("SELECT ReviewId, Batch FROM review WHERE TaskId=? AND Status IN ('pending','held') AND CreatedAt>=? ORDER BY ReviewId", (int(tid), at))
+    if own := [r['ReviewId'] for r in rows if todo in _todos(store, r['ReviewId'])]: return own
+    last = rows[-1] if rows else {}
+    rids = [r['ReviewId'] for r in rows if r is last or (last.get('Batch') and r['Batch'] == last['Batch'])]
     for rid in rids: store.audit('review', rid, FULFILS, 'agent', 'agent', {'todo': todo})
     return rids
 

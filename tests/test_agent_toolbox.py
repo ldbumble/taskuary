@@ -1406,6 +1406,29 @@ class TheCardIsNamedOneWay(unittest.TestCase):
         verdicts.decide(self.s, self.s.get_review(er), 'reject')
         self.assertFalse(self.done(b), 'his no leaves it open')
 
+    def test_a_tick_beside_several_cards_waits_on_the_one_it_is_tied_to(self):
+        """One turn raised two letters, then ticked a to-do: the tick waited on BOTH, so his no on one and Send on the other ticked it. It is
+        the card whose `todo` names it, else the newest card raised beside it - only that card's press ticks it. Invented people."""
+        from taskuary import outbound, verdicts
+        sent = mock.patch.object(outbound, 'send_out', return_value={'channel': 'email', 'to': ['gail@northwind.example'], 'cc': []})
+        a = self.todo('Email Erin the venue')
+        gail, erin = self.email('gail@northwind.example', 'Hi Gail - the menu. Alex'), self.email('erin@northwind.example', 'Hi Erin - the venue. Alex')
+        said, err = tool(self.tid, 'tick', item=a, done=True)
+        self.assertFalse(err, said); self.assertIn(f'rv{erin}', said); self.assertNotIn(f'rv{gail}', said)
+        verdicts.decide(self.s, self.s.get_review(erin), 'reject')
+        with sent: self.assertTrue(verdicts.decide(self.s, self.s.get_review(gail), 'approve')['ok'])
+        self.assertFalse(self.done(a), 'his no on the card it was tied to leaves it open, whatever else went')
+        # ...and the card whose `todo` names it is that card, wherever it stands among the turn's cards
+        b = self.todo('Email Paula the dates')
+        paula = self.email('paula@northwind.example', 'Hi Paula - the dates. Alex', todo=b)
+        ray = self.email('ray@northwind.example', 'Hi Ray - the dates too. Alex')
+        said, err = tool(self.tid, 'tick', item=b, done=True)
+        self.assertFalse(err, said); self.assertIn(f'rv{paula}', said); self.assertNotIn(f'rv{ray}', said)
+        with sent: self.assertTrue(verdicts.decide(self.s, self.s.get_review(paula), 'approve')['ok'])
+        self.assertTrue(self.done(b), 'its own card went: ticked, whatever the other card waits on')
+        verdicts.decide(self.s, self.s.get_review(ray), 'reject')
+        self.assertTrue(self.done(b))
+
     def test_the_todo_a_card_does_names_the_email_it_is(self):
         "`slot` folds into `todo`: the to-do an email does is the email triage listed, filled - never a second one beside it."
         from taskuary import slots

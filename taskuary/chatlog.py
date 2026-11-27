@@ -1518,6 +1518,31 @@ def turn_words(t: dict) -> str:
     return ' '.join(re.sub(r'[*_`]', '', ' '.join([str(t.get('text') or ''), *(s.get('text') or '' for s in t.get('steps') or [] if s.get('k') == 'said')])).split())
 
 
+# THE AGENT'S QUESTIONS ARE A CARD IN THE TURN THAT ASKED THEM (the owner, 2026-11-27: "shouldn't all questions if possible be a card? Like survey
+# question" - a routine's agent asked through its question tool and his chat drew a plain line). Each question it asked in its own words - its
+# question tool's, a marker's, a CLI's own - is read off its run's record (workerstate) and placed at the turn at work when it was asked: the
+# page draws them as one questions card at that turn's foot, answered on it or by his line in the box, and still standing once answered, with
+# what he said (locked rule 10: cards stay). -> {turn id: [{request_id, text, choices, open, answer}]}
+def asked_in(store, tid: int, turns: list) -> dict:
+    from . import workerstate as ws
+    if not turns: return {}
+    evs = ws.events(store, int(tid))
+    said = {e['RequestId']: (e.get('Source'), e.get('Text') or '') for e in evs if e['Kind'] == 'answered'}
+    live = {r['request_id'] for r in ws.status(store, int(tid))['requests']}
+    ids, seen, out = {t['id'] for t in turns}, set(), {}
+    for e in evs:
+        # ...once each: a restart carries an open question onto the new run under its own id (server.resume_asking)
+        if (rid := e['RequestId']) in seen or not (ws.in_words(e) and e.get('Text') and e.get('Source') != ws.READ_OFF_PROSE): continue
+        seen.add(rid)
+        on = (_turn_at(store, tid, e['CreatedAt']) or {}).get('Key')
+        try: choices = json.loads(e.get('ChoicesJson') or '[]') or []
+        except ValueError: choices = []
+        by, words = said.get(rid, (None, ''))
+        out.setdefault(on if on in ids else turns[-1]['id'], []).append({'request_id': rid, 'text': e['Text'], 'choices': choices, 'open': rid in live,
+                                                                       'answer': words if by == 'owner' and rid not in live else ''})
+    return out
+
+
 def beside(store, tid: int, out: list, at_work: bool, hold_, ending: bool = False) -> dict:
     """What the page draws beside the chat's items, each from the fact that says it: what waits for the agent (`pending` - his lines not yet
     heard; a message, a press while a turn works; what an untrusted sender wrote), `now`/`later` (whether a waiting line goes in mid-turn),
@@ -1610,7 +1635,7 @@ def beside(store, tid: int, out: list, at_work: bool, hold_, ending: bool = Fals
     # at its opening, its page never drew (the design loop, 2026-11-20)
     sid = getattr(lv, 'sid', '') or getattr(live, 'sid', '') or ''
     return {'pending': pend, 'needsOwner': taskstate.needs_owner(ask, taskstate.browser_acts(store, tid), sid), 'now': now, 'later': later, 'dropped': [d for d in dropped if d], 'working': at_work,
-            'started': general.turn_started(tid) if at_work else None, 'asking': ask, 'live': codingchat.live_of(lv),
+            'started': general.turn_started(tid) if at_work else None, 'asking': ask, 'asked': asked_in(store, tid, turns), 'live': codingchat.live_of(lv),
             # ...what stands lit beside its front (cardqueue.alone), and each card that is a set under tabs (cardqueue.sets) - none on a task a
             # stranger's words hold: no card waits there
             'letters': letters, 'idle': idle, 'queue': {'live': q['live'], 'held': q['held'], 'line': cardqueue.line(q),

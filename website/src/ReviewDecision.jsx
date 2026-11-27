@@ -45,7 +45,7 @@ import { draftCanSend, useCapabilities } from "./capabilities.js";
 import { blankSpans } from "./blanks.js";
 import { outputRow } from "./taskOutputs.js";
 import { ReviewCard } from "./Artifact.jsx";
-import { answeredAny, answersFor, answersOf, askFields } from "./questionsCard.js";
+import { answeredAny, answerLine, answersFor, answersOf, askedAnswers, askedCard, askedOpen, askFields } from "./questionsCard.js";
 const hint = btnHint;
 
 // What they wrote, above what we would say back. The queue used to show only the draft: you
@@ -639,6 +639,23 @@ export function SentReview(p) {
   return <ReviewCard id={p.id || ""} kind="reply" state="sent" data-tq-sent-here={p.id || ""} label={sentTitle(p)}
     fields={[{ key: "draft", type: "text", value: p.text, clamp: true, dim: true }]}
     after={{ mark: "sent", label: sentMark(p), line: `${sentSaid(p)}${p.at ? ` · ${fmtDateTime(p.at)}` : ""}` }} />;
+}
+
+// WHAT THE AGENT ASKED IN WORDS, AS THE QUESTIONS CARD (questionsCard.js askedCard; taskuary/chatlog.py asked_in): the same card and fields as
+// the questions it raises together, at the foot of the turn that asked - a pick where it gave choices, a line to type in. Its press is his line
+// to the agent (`onAnswer`, the box's own road, so the box answers it as well); answered there or in the box, it stays with his words
+export function AskedCard({ qs, onAnswer = null }) {
+  const [answers, setAnswers] = useState([]), [going, setGoing] = useState(false), [err, setErr] = useState("");
+  const open = askedOpen(qs) && !!onAnswer, line = answerLine(qs, answers), done = !open && (qs || []).some((q) => q.answer);
+  const send = async () => {
+    if (going || !line) return;
+    setGoing(true); setErr("");
+    try { await onAnswer(line); } catch (e) { setErr(e?.response?.data?.detail || e?.message || "Your answer did not reach the agent."); } finally { setGoing(false); }
+  };
+  const fields = askFields(askedCard(qs), open ? answers : askedAnswers(qs), open ? (i, v) => setAnswers((a) => Object.assign([...a], { [i]: v })) : null);
+  return <ReviewCard id={`ask:${qs?.[0]?.request_id || ""}`} kind="questions" state={open ? "waiting" : done ? "approved" : "passed"} fields={fields} failed={err}
+    press={open ? [{ id: "approve", label: qs.length > 1 ? "Send answers" : "Send answer", tone: "p", run: send, disabled: going || !line, spin: going }] : []}
+    after={done ? { mark: "approved", label: "✓ Answered" } : null} />;
 }
 
 // THE WAY TO THE FILL PAGE, ON THE SIGN-IN'S OWN CARD (pagestep `fill`; the card gallery, 2026-11-25: it was a chat line over the card, the step

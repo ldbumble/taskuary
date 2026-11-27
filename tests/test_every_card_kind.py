@@ -364,6 +364,47 @@ def test_questions_the_agent_takes_back_or_gives_wrongly_leave_nothing_standing(
     assert w.s.get_review(rv['ReviewId'])['Status'] == 'superseded' and w.cards()[rv['ReviewId']]['status'] != 'pending', 'greyed where it stood, never gone'
 
 
+def _ends(w) -> list:
+    "The turn's end as its one reader files it (general._file): each question its tool asked is his open question on the run."
+    from taskuary import selfclose
+    _said, asks = selfclose.ask_markers(selfclose.take_marks(w.tid))
+    for q, ch in asks: ws.record(w.s, w.tid, 'run1', 'input_needed', request_id=ws.request_id_for(q), text=q, choices=ch, source='api')
+    return asks
+
+
+def _asked(w) -> dict:
+    items = chatlog.read(w.s, w.tid)['items']
+    return items, chatlog.beside(w.s, w.tid, items, False, None)['asked']
+
+
+IDEA = 'What idea should the posts be about today?'
+def test_the_agents_one_question_is_a_card_in_his_chat_at_the_foot_of_the_turn_that_asked_it(w):
+    """The owner's live routine, 2026-11-27: its agent asked through its question tool and his chat drew a plain line - no card - and the agent,
+    told its question "stands on the task", said it was "on the task card". The question is a card in the turn that asked it, and the agent is
+    told so, and told it again on every later turn while it waits."""
+    said, err = _tool(w, 'ask_owner', question=IDEA, choices=['Skip today'])
+    assert not err and 'in his chat' in said and 'on the task' not in said, said
+    _ends(w)
+    items, asked = _asked(w)
+    turn = [x for x in items if x['kind'] == 'turn'][-1]
+    assert list(asked) == [turn['id']], asked
+    [q] = asked[turn['id']]
+    assert (q['text'], q['choices'], q['open'], q['answer']) == (IDEA, ['Skip today'], True, ''), q
+    assert f'Your question, waiting for his answer as its card in his chat (on the card or in his box): {IDEA}' in cardqueue.screen(w.s, w.tid)
+
+
+def test_his_line_in_the_box_answers_the_question_card_once_and_the_card_stays_with_his_words(w):
+    _tool(w, 'ask_owner', question=IDEA, choices=['Skip today']); _ends(w)
+    _line(w, 'Approvals that wait for a press')
+    items, asked = _asked(w)
+    [q] = [q for qs in asked.values() for q in qs]
+    assert (q['open'], q['answer']) == (False, 'Approvals that wait for a press'), 'the card stays where it stood, answered with his words'
+    got = [e for e in ws.events(w.s, w.tid) if e['Kind'] == 'answered' and e['RequestId'] == q['request_id']]
+    assert len(got) == 1 and got[0]['Text'] == 'Approvals that wait for a press', got
+    assert not ws.answer(w.s, w.tid, q['request_id'], 'Approvals')['delivered'], 'answered once: a second answer is not handed over'
+    assert not cardqueue.asking(w.s, w.tid) and 'Your question' not in cardqueue.screen(w.s, w.tid)
+
+
 def test_the_landing_question_wakes_its_agent_only_where_its_proposal_named_a_step_after_it(w):
     for then, woken in (('', 0), ('check the deploy is live', 1)):
         w.woken.clear()

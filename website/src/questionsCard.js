@@ -13,3 +13,13 @@ export const askFields = (p, answers = [], onChange = null) => asksOf(p).map((q,
 export const asksLine = (p) => { const n = asksOf(p).length; return `${n} question${n === 1 ? "" : "s"} · your answers go to the agent together`; };
 // the answers as the press sends them: one per question, trimmed, "" where he left one empty
 export const answersFor = (p, answers = []) => asksOf(p).map((_, i) => String(answers[i] ?? "").trim());
+// ...AND A QUESTION THE AGENT ASKED IN WORDS IS THE SAME CARD (taskuary/chatlog.py asked_in; the owner, 2026-11-27: "shouldn't all questions if
+// possible be a card? Like survey question"): one turn's questions as the card's data, what he answered by place, whether any still waits - and
+// his answers as the one line the agent hears, as if typed in the box: the answer alone for one, numbered for several (workerstate.split_answers)
+export const askedCard = (qs) => ({ action: "questions", questions: (qs || []).map((q) => ({ question: q.text, choices: q.choices || [] })) });
+export const askedOpen = (qs) => (qs || []).some((q) => q.open);
+export const askedAnswers = (qs) => (qs || []).map((q) => String(q.answer ?? ""));
+export const answerLine = (qs, answers = []) => {
+  const a = answersFor(askedCard(qs), answers);
+  return a.length === 1 ? a[0] : a.map((x, i) => (x ? `${i + 1}. ${x}` : "")).filter(Boolean).join("\n");
+};

@@ -95,9 +95,40 @@ def pr_plan(store, task_id: int, p: dict = None) -> dict:
     norm = lambda d: os.path.normcase(os.path.realpath(d))
     at = landing.top(str(p.get('cwd') or ''))
     cwd = at if at and norm(at) in map(norm, landing.named(store, task_id)) else getattr(hub_term.session_for(task_id), 'cwd', None) or ''
-    repo = hub_term.guess_repo(store, task_id, {})[0] or _cfg(store).get('default_repo') or (landing._repo(cwd) if cwd else '') or str(p.get('repo') or '')
+    repo = known_repo(store, task_id, cwd) or str(p.get('repo') or '')
     return {'title': f"[{task_ref(task_id)}] {' '.join(str(p.get('title') or '').split()) or t.get('Title') or 'work'}"[:120],
             'repo': repo, 'branch': branch_for(store, task_id, cwd) if cwd else '', 'base': base_of(store, cwd, repo), 'cwd': cwd}
+
+
+# WHICH REPOSITORY A TASK'S PULL REQUEST GOES TO IS A STORED FACT WHERE ONE SAYS (walk 25, 2026-11-26: refused for no `repo`, an agent made one
+# up - "alexdoyle/ledger" - while the checkout's own origin named northwind/ledger; the card went up and his Approve opened it there): the
+# task's own repository, the GitHub card's default, the checkout's origin as git resolves it - and as the checkout wrote it down, where a
+# rewrite (insteadOf) sends the push somewhere git cannot name as a repository
+def known_repo(store, task_id: int, cwd: str = '') -> str:
+    from . import landing, shellgate, terminal as hub_term
+    from .agents import _git
+    if (r := hub_term.guess_repo(store, task_id, {})[0] or _cfg(store).get('default_repo') or (landing._repo(cwd) if cwd else '')): return r
+    url = (_git(cwd, 'config', '--get', 'remote.origin.url') or '').strip() if cwd else ''
+    return shellgate.host_repo(url)[1] if 'github' in url.lower() else ''
+
+
+def repo_why(store, task_id: int, plan: dict, p: dict = None) -> str:
+    """'' when the repository a pull request's card names is one somebody checked - else why not, with the exact fix (the raise's check:
+    proposals.queue). One the agent names against what is known is answered with what is known; one only the agent names is read through the
+    GitHub card that reaches it, where there is one - with none, the press says so as before."""
+    named, repo = ' '.join(str((p or {}).get('repo') or '').split()), plan['repo']
+    if named and named.lower() != repo.lower(): return f"this task's pull request goes to {repo}, not {named} - give `repo` as {repo}, or leave it out"
+    if not repo or known_repo(store, task_id, plan['cwd']): return ''
+    c = store.github_for(repo, with_secret=True)
+    if not (c and c.get('Secret')): return ''
+    try:
+        from . import github
+        github.repo_info(c['Secret'], repo)
+    except Exception as e:
+        from . import say
+        return (f"{repo} could not be read through the GitHub card ({say.reason(e)[:160] or 'it did not answer'}) - `repo` is the owner/name the "
+                "checkout's origin pushes to (git remote -v)")
+    return ''
 
 
 def base_of(store, cwd: str = '', repo: str = '') -> str:

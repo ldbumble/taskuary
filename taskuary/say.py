@@ -45,6 +45,15 @@ def held_why(why) -> str:
 def _cap(s: str) -> str: return s[:1].upper() + s[1:]
 
 
+# A SERVICE A CARD COULD NOT READ, said on that card (walk 25, 2026-11-26: a merge card read "GitHub could not be read just now (list indices
+# must be integers or slices, not str)" - Python's own account of an answer it could not take apart). What the service said is his to read;
+# an answer of a shape Taskuary did not expect is said as that, by the failure's type - never its text
+_SHAPE = (TypeError, KeyError, IndexError, AttributeError)
+def unread(name: str, e) -> str:
+    why = 'its answer was not one Taskuary could read' if isinstance(e, _SHAPE) else reason(e)[:160]
+    return f'{name} could not be read just now' + (f' ({why})' if why else '') + ' - open the card again in a moment'
+
+
 # A TURN THE AI PROVIDER ENDED, read off the failure's structure - its HTTP status, its error `type` - never its prose (the owner, 2026-11-19: a
 # failed turn showed the provider's raw error JSON twice). He reads one plain line and what happens next; the raw text is the agent's
 _STATUS = re.compile(r'\b(4\d\d|5\d\d)\b')

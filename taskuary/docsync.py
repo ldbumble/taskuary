@@ -142,7 +142,7 @@ def agent_systems(store, tooled: bool = True, tid=None) -> str:
 # the owner's defaults on the card fill (connectorcatalog `actions`). The generic ones (an MCP tool, a GraphQL call) are no act of their own.
 def act_cards(store, tid=None) -> str:
     from . import scopes
-    from .connectorcatalog import action_for, as_now, connected
+    from .connectorcatalog import action_for, as_now, connected, given
     from .proposals import MEDIA, VIDEO
     from .reports import REGISTRY, card_of
     from .workstreams import may_use
@@ -150,7 +150,7 @@ def act_cards(store, tid=None) -> str:
     except Exception: return ''
     def takes(t):
         act = action_for(t) or {'fields': []}
-        mine = [f"`{f['key']}`" for f in act['fields'] if f.get('agent')]
+        mine = [f"`{given(f)}`" for f in act['fields'] if f.get('agent')]
         theirs = [f"`{f['key']}` ({' or '.join(str(c['value']) for c in f['choices'])})" for f in act['fields'] if f.get('setting')]
         return (f"; it takes {', '.join(mine)}" if mine else '') + (f"; {' and '.join(theirs)} come from the owner's defaults on the card" if theirs else '')
     rows = [f"- {c.get('Name') or c['Type']} (connector_id {c['ConnectorId']}): {t} - {scopes.REACHES[t]}" + (', with a picture or a video' if t in VIDEO else ', with a picture' if t in MEDIA else '')

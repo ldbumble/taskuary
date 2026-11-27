@@ -162,6 +162,14 @@ def action_for(tool: str) -> dict | None:
     "The declared act a run_tool on `tool` is, with the card it belongs to - None for a tool no card sets up for a press."
     return next(({**a, 'card': c['type']} for c in cards() for a in c.get('actions') or [] if a.get('tool') == tool), None) if tool else None
 def field(act: dict, key: str) -> dict | None: return next((f for f in (act or {}).get('fields') or [] if f['key'] == key), None)
+# A FIELD IS GIVEN BY THE NAME THAT SAYS WHAT IT TAKES (walk 25, 2026-11-26: a LinkedIn post carries a picture or a video, and the field its
+# agent was told to put the video in was `image`): `as` is that name - what an agent is told and gives - and `key` what the card keeps. The
+# key itself is taken as before
+def given(f: dict) -> str: return f.get('as') or f['key']
+def keyed(act: dict, p: dict) -> dict:
+    "`p` with each field given by its `as` name kept under its key - one given by the key stands."
+    names = {f['as']: f['key'] for f in (act or {}).get('fields') or [] if f.get('as')}
+    return {**{k: v for k, v in p.items() if k not in names}, **{names[k]: v for k, v in p.items() if k in names and names[k] not in p}}
 def text_key(act: dict) -> str | None:
     "The act's words the owner edits in its box (a post's `text`, a tracker comment's `body`)."
     return next((f['key'] for f in (act or {}).get('fields') or [] if f['type'] == 'text' and f.get('edit')), None)

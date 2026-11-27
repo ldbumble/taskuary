@@ -327,7 +327,8 @@ def assess(store, p: dict) -> dict:
     out = {'state': 'open', 'ok': True, 'reason': '', 'note': '', 'offers': []}
     try: s = state(store, t, p.get('item'), p.get('connector_id'))
     except Exception as e:
-        return {**out, 'state': 'unknown', 'ok': False, 'reason': f'{NAMES.get(t, t)} could not be read just now ({str(e)[:160]}) - open the card again in a moment'}
+        from . import say
+        return {**out, 'state': 'unknown', 'ok': False, 'reason': say.unread(NAMES.get(t, t), e)}
     if s['done']: return {**out, 'state': 'done', 'note': f"{s['item']} is already {s['status']} in {NAMES[t]} - {_approve()} posts the comment alone"}
     if not s['to']: return {**out, 'note': f"{s['why']} for {s['item']} - {_approve()} posts the comment alone"}
     return {**out, 'to': s['to']['name'], 'from': s['status']}

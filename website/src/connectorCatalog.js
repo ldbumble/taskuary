@@ -52,6 +52,10 @@ export const cardState = (c) => (c.state || (c.planned ? "planned" : c.guide ? "
 // connections). The catalogue's own group stays the key - links, the rail's pick and connectorcatalog.json name it - and only what is drawn changes
 const SECTION_SAID = { Observability: "Monitoring & alerts", "Agentic web": "Web search & reading" };
 export const sectionName = (group) => SECTION_SAID[group] || group;
+// WHOSE ACCOUNT A CARD IS, as its Profile picker shows it (walk 25: saved as it is picked, the picker read the row its page was opened with,
+// which only some cards' reload re-reads - four of five went back to "All profiles" over a tag that was saved). His pick on this card is
+// what stands, shown at once; the row's own tag until he picks. `picked`: {id, slug} of the pick made on this page - null before one, or after a save failed
+export const profileShown = (conn, picked) => (picked && picked.id === conn?.ConnectorId ? picked.slug : conn?.Workstream) || "";
 // WHAT A CARD DOES, in its status line: the roles' shorthand ("trigger + tool") was the catalogue's own vocabulary
 const ROLE_SAID = { trigger: "brings in work", feed: "shows new items", report: "feeds reports", tool: "agents can use it" };
 // ...and the line itself, in plain words (same audit: "off · trigger + tool · 0/0 mailboxes"): whether it is on, what it does, how many of

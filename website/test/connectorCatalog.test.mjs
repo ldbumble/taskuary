@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 const read = (n) => fs.readFileSync(path.join(process.cwd(), "src", n), "utf8");
-import { browseSummary, CATALOGUE, PLANNED_CONNECTORS, onceEach, plannedFor } from "../src/connectorCatalog.js";
+import { browseSummary, CATALOGUE, PLANNED_CONNECTORS, onceEach, plannedFor, profileShown } from "../src/connectorCatalog.js";
 import { AI_SHELF } from "../src/aiShelf.js";
 
 const CATEGORIES = [
@@ -91,6 +91,15 @@ test("a mailbox preset makes an IMAP card with its servers, and is offered until
   const view = read("ConnectorsView.jsx");
   assert.match(view, /\.\.\.presetCards\(\["fastmail", "yahoo_mail", "proton_mail", "exchange"\]\)/);
   assert.match(view, /const m = metaOf\(conn\) \|\| \{ fields: \[\], howto: \[\] \};/);
+});
+
+test("a card's Profile picker shows his pick at once, whatever row its page still holds - and the row's own tag until he picks", () => {
+  const stale = { ConnectorId: 4, Workstream: "" };                    // the row a card's page was opened with: its reload did not re-read it
+  assert.equal(profileShown(stale, null), "");
+  assert.equal(profileShown(stale, { id: 4, slug: "harbor-bakery" }), "harbor-bakery");
+  assert.equal(profileShown({ ConnectorId: 4, Workstream: "harbor-bakery" }, { id: 4, slug: "" }), "", "back to All profiles is a pick too");
+  assert.equal(profileShown({ ConnectorId: 5, Workstream: "northwind" }, { id: 4, slug: "harbor-bakery" }), "northwind", "another card's pick is not this one's");
+  assert.equal(profileShown({ ConnectorId: 4, Workstream: "northwind" }, null), "northwind", "a failed save falls back to what is stored");
 });
 
 test("the Connections line counts the catalogue, not only the cards still planned", () => {

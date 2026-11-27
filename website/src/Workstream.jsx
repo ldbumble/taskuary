@@ -6,6 +6,7 @@ import React, { useEffect, useState } from "react";
 import { Box, Typography } from "@mui/material";
 import LayersIcon from "@mui/icons-material/LayersOutlined";
 import api from "./api";
+import { profileShown } from "./connectorCatalog.js";
 import { BORDER, DIM, FAINT, INK } from "./theme.jsx";
 
 let cache = null;          // one read per page load: the list changes only through the setup screen or an Advisor card
@@ -83,16 +84,17 @@ export const SkillProfile = ({ skill, reload }) => {
 export const AccountProfile = ({ conn, reload }) => {
   const xs = useWorkstreams();
   const [err, setErr] = useState("");
+  const [picked, setPicked] = useState(null);     // his pick on this card, shown at once (profileShown) - back to the row's own where the save failed
   if (xs.length < 2 || !conn?.ConnectorId) return null;
   const pick = async (slug) => {
-    setErr("");
+    setErr(""); setPicked({ id: conn.ConnectorId, slug });
     try { await api.put(`/api/connectors/${conn.ConnectorId}/workstream`, { workstream: slug }); reload?.(); }
-    catch (e) { setErr(e?.response?.data?.detail || "Could not save it"); }
+    catch (e) { setPicked(null); setErr(e?.response?.data?.detail || "Could not save it"); }
   };
   return (
     <Box data-tq-account-profile="" sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 1 }}>
       <Typography component="label" htmlFor={`tq-profile-${conn.ConnectorId}`} variant="caption" sx={{ color: DIM }}>Profile</Typography>
-      <select id={`tq-profile-${conn.ConnectorId}`} value={conn.Workstream || ""} onChange={(e) => pick(e.target.value)}
+      <select id={`tq-profile-${conn.ConnectorId}`} value={profileShown(conn, picked)} onChange={(e) => pick(e.target.value)}
         style={{ fontSize: 12.5, padding: "2px 6px", borderRadius: 6, border: `1px solid ${BORDER}`, background: "var(--tq-panel, #fff)", color: INK }}>
         <option value="">All profiles</option>
         {xs.map((w) => <option key={w.slug} value={w.slug}>{w.name}</option>)}

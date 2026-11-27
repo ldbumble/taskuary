@@ -172,7 +172,7 @@ def post_type(network) -> str | None:
     n = str(network or '').strip().lower().removesuffix('_post')
     return next((t for k, t in NETWORKS.items() if n in (k, POSTS[t].lower(), *re.findall(r'[a-z0-9]+', ((by_type(k) or {}).get('title') or '').lower()))), None)
 def post_of(a: dict) -> dict:
-    """A post propose call as the run_tool proposal the post road files (queue, card_roads, via_browser): `picture` is its `image`, and a
+    """A post propose call as the run_tool proposal the post road files (queue, card_roads, via_browser): `media` (`picture`, as it was) is its `image`, and a
     `link` where the network has no field of its own for one goes at the end of its words. ValueError names the networks there are."""
     from .connectorcatalog import action_for, field
     t = post_type(a.get('network'))
@@ -182,7 +182,7 @@ def post_of(a: dict) -> dict:
     if link and not own and link not in text: text = f'{text}\n\n{link}'.strip()
     # ...only what its network's card takes: a `title` on an X post is no field of X's, and was refused as running unseen - it is left off
     keep = {k: a[k] for k in ('subreddit', 'title', 'why', 'alt') if str(a.get(k) or '').strip() and (k in ('why', 'alt') or field(action_for(t), k))}
-    return {'action': 'run_tool', 'type': t, 'text': text, **keep, **({'image': a['picture']} if a.get('picture') else {}),
+    return {'action': 'run_tool', 'type': t, 'text': text, **keep, **({'image': m} if (m := a.get('media') or a.get('picture')) else {}),
             **({'link': link} if link and own else {})}
 # A POST ON A NETWORK NOT CONNECTED IS STILL ITS CARD, AND ITS PRESS HANDS IT TO THE AGENT FOR THE SITE (the owner, 2026-11-22: "card first,
 # sign-in at the press"): the agent went to LinkedIn's sign-in before writing a word, then gave the posts back as prose. The card stands with
@@ -678,7 +678,9 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
     # write is the owner's own saved step and keeps what he saved
     several = ''
     if p.get('action') == 'run_tool' and actor != 'workflow':
+        from .connectorcatalog import action_for, keyed
         from .reports import REGISTRY, query_only, tool_card
+        p = keyed(action_for(p.get('type')), p)          # ...a field by the name its agent was told (`media`) is the card's own (`image`)
         p = shown_only({**query_only(p), **({'connector_id': p['connector_id']} if str(p.get('connector_id') or '').strip() else {})})
         # ...on THE card it will run on, pinned now (reports.tool_card): the press ran the first card of its type, under a card naming it
         if p.get('type') in REGISTRY and not p.get('connector_id'):

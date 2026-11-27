@@ -4387,6 +4387,7 @@
             },
             {
               "key": "image",
+              "as": "media",
               "label": "Picture",
               "type": "image",
               "agent": true
@@ -4742,6 +4743,7 @@
             },
             {
               "key": "image",
+              "as": "media",
               "label": "Picture",
               "type": "image",
               "agent": true

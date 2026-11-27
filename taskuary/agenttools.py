@@ -125,7 +125,7 @@ TOOLS = {
              ('GET', '/api/tasks/1')),
     # ...and A PICTURE, drawn by the owner's image model (images.pick: an image card, or an AI card whose models include one) - the one road to
     # images.run_image_generate an agent has; with nothing to draw with, its answer is his Connect card (the owner, 2026-11-25)
-    'draw_image': ('own', "Draw a picture from `prompt` with the owner's image model; it lands in this task's files - a card's `image` "
+    'draw_image': ('own', "Draw a picture from `prompt` with the owner's image model; it lands in this task's files - a card's `media` "
                           "by its name, or shown in his chat by `show`. `size`: 1024x1024, 1024x1536 (tall) or 1536x1024 (wide). With no "
                           "image model connected, nothing is drawn and his chat shows the card that connects one.",
                    _S({'prompt': _STR, 'size': {'type': 'string', 'enum': ['1024x1024', '1024x1536', '1536x1024']}}, ('prompt',)),
@@ -291,7 +291,7 @@ TOOLS = {
                            "`from` a connected mailbox (list_systems names them) - else the one this task's mail came in on; `slot` the id "
                            "of the checklist line it is (\"-> email to ..., slot <id>\"), \"new\" for a second, separate email to someone "
                            "you already wrote to this turn; `guessed` any address on it you guessed - the card says so.\n"
-                           "- post: `network` (" + ', '.join(NETWORKS) + "), `text`, `picture` a picture or video file in your task folder, `link`, and on "
+                           "- post: `network` (" + ', '.join(NETWORKS) + "), `text`, `media` a picture or video file in your task folder, `link`, and on "
                            "Reddit `subreddit` and `title`. One card per network; on the press it goes up through the network's connection, "
                            "else in the browser with the final Post waiting for his press.\n"
                            "- skill: `name`, `text` the SKILL.md whole - frontmatter `name` and `description` (what the job is and when to use "
@@ -318,7 +318,7 @@ TOOLS = {
                 {'type': 'object', 'properties': {'kind': {'type': 'string', 'enum': list(KINDS)}, 'text': _STR, 'to': _STR, 'subject': _STR,
                                                   'cc': {'type': 'array', 'items': _STR}, 'answers': _INT, 'only': {'type': 'boolean'}, 'why_to': _STR,
                                                   'from': _STR, 'slot': _STR, 'guessed': {'type': 'array', 'items': _STR},
-                                                  'network': {'type': 'string', 'enum': list(NETWORKS)}, 'picture': _STR, 'link': _STR, 'subreddit': _STR,
+                                                  'network': {'type': 'string', 'enum': list(NETWORKS)}, 'media': _STR, 'link': _STR, 'subreddit': _STR,
                                                   'title': _STR, 'name': _STR, 'action': _STR, 'attach': _ATTACH, 'why': _STR, 'replaces': _STR},
                  'additionalProperties': True}, ('POST', '/api/agent/propose')),
     # ...and EVERY TOOL'S FULL INSTRUCTIONS, ON ASK (the owner, 2026-11-15: "MCP-style tools with simple JSON ... All methods can be searched
@@ -906,7 +906,7 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
         # ...A FILE OF THE TASK, DRAWN NOWHERE BY ITSELF (the re-walk, 2026-11-25: a picture the agent then did not use - it made a better one for
         # its cards - stood in the chat as a file of its own): a card that carries it draws it; `show` hands it to him where it is the answer
         return (f"Drew {out['name']} with {out['label']} - a file of this task, {out['file']}. Not in his chat: a card you name it on as its "
-                "`image` draws it there, and `show` puts it in the chat where the picture itself is what he asked for.")
+                "`media` draws it there, and `show` puts it in the chat where the picture itself is what he asked for.")
     if name == 'tick': return _j(doors['tick'](tid, str(a['item']), a.get('done', True) is not False))
     if name == 'check_back': return _j(doors['check_back'](tid, str(a.get('when') or ''), str(a.get('what') or '')))
     if name == 'todos': return _j(doors['todos'](tid, a))
@@ -1028,7 +1028,7 @@ def _review(store, tid: int, a: dict, doors: dict) -> str:
         rest = {'action': 'save_skill', 'slug': str(a.get('name') or a.get('slug') or 'new'), 'text': str(a.get('text') or ''),
                 **({'why': str(a['why'])} if a.get('why') else {}), 'offer': SKILL_OFFER.format('email' if mail else 'job')}
         a = {**a, 'replaces': a.get('replaces') or next((f"rv{r['rid']}" for r in verdicts.unsent(store, tid) if r['to'] == 'save_skill'), None)}
-    if k == 'post' and not rest.get('picture') and isinstance(a.get('attach'), list) and a['attach']: rest['picture'] = str(a['attach'][0])
+    if k == 'post' and not (rest.get('media') or rest.get('picture')) and isinstance(a.get('attach'), list) and a['attach']: rest['media'] = str(a['attach'][0])
     old, was, p = a.get('replaces'), verdicts.unsent(store, tid), post_of(rest) if k == 'post' else rest
     out = doors['propose'](tid, p)
     return _j(card_roads(store, replaced(store, doors, tid, was, out, old, 'a new proposal takes its place'), p))

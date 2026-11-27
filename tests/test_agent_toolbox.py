@@ -1023,6 +1023,27 @@ class APostIsAKindOfTheOneReviewTool(unittest.TestCase):
         said, err = tool(self.tid, 'propose', text='Hi')
         self.assertTrue(err); self.assertIn('`kind` was not given', said)
 
+    def test_a_posts_picture_or_video_is_given_as_media_and_the_names_it_had_are_still_taken(self):
+        """Walk 25, 2026-11-26: LinkedIn's card carries a picture or a video, and its agent was told the field for it is `image` (propose's
+        own was `picture`) - one went to the site with its video. The field is told and given as `media` on both doors; the card keeps it
+        under the key it always had, and a call that still says `picture` or `image` is taken as before."""
+        from taskuary import connectorcatalog as cat
+        from taskuary.proposals import post_of
+        act = cat.action_for('linkedin_post')
+        self.assertEqual([cat.given(f) for f in act['fields'] if f.get('agent')][:2], ['text', 'media'])
+        self.assertIn('`media` a picture or video', agenttools.TOOLS['propose'][1])
+        self.assertIn('media', agenttools.TOOLS['propose'][2]['properties'])
+        for name in ('media', 'picture'):
+            self.assertEqual(post_of({'network': 'linkedin', 'text': 'Day four.', name: 'close.mp4'})['image'], 'close.mp4', name)
+        self.assertEqual(cat.keyed(act, {'type': 'linkedin_post', 'text': 'Day four.', 'media': 'close.mp4'}), {'type': 'linkedin_post', 'text': 'Day four.', 'image': 'close.mp4'})
+        self.assertEqual(cat.keyed(act, {'image': 'close.png'}), {'image': 'close.png'})
+        self.assertEqual(cat.keyed(None, {'media': 'x'}), {'media': 'x'}, 'a tool with no card of its own is left as given')
+        for name in ('media', 'image'):
+            said, err = tool(self.tid, 'propose', kind='act', action='run_tool', type='linkedin_post', text=f'Three tools, compared ({name}).', **{name: 'tools-compared.png'})
+            self.assertFalse(err, said)
+            p = json.loads(self.cards()[-1]['DraftText'])
+            self.assertEqual((p.get('image'), 'media' in p), ('tools-compared.png', False), name)
+
     SKILL_MD = ('---\nname: renewal-uplift\ndescription: Answer a vendor asking for a renewal uplift. Use when a renewal notice names a price rise.\n---\n'
                 '# Renewal uplift\n\nCompare the uplift with last year, then answer with the number we accept.\n')
 

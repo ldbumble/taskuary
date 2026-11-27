@@ -38,7 +38,7 @@ const AskBar = ({ asked }) => {
 
 // A SMALL MARK BY KIND (the owner, 2026-11-05: "look how other chat libraries show intermediately the tool calls"): a search, a web page, a
 // file, a command, the browser - read at a glance down the column, the words beside it say which
-const ICON = { web: SearchIcon, page: WebIcon, read: FileIcon, edit: WriteIcon, list: FolderIcon, search: FindIcon, run: CommandIcon, mail: MailIcon,
+const ICON = { web: SearchIcon, page: WebIcon, read: FileIcon, skill: FileIcon, edit: WriteIcon, list: FolderIcon, search: FindIcon, run: CommandIcon, mail: MailIcon,
   task: TaskIcon, data: DataIcon, plan: PlanIcon, helper: HelperIcon, sync: SyncIcon, tool: ToolIcon, thought: ThoughtIcon };
 export const iconOf = (step) => (step.kind === "page" && step.browser ? BrowserIcon : ICON[step.kind] || null);
 const Mark = ({ step }) => { const I = iconOf(step); return I ? <I aria-hidden className="tq-aui-step-icon" /> : <span className="tq-aui-tool-dot" />; };

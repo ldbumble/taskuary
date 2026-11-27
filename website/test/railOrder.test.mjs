@@ -56,7 +56,8 @@ test("the rail marks an urgent row's dot in place and says urgent to a screen re
   const css = readFileSync(fileURLToPath(new URL("../src/assistantView.css", import.meta.url)), "utf8");
   assert.match(view, /const hot = !i\.settling && isUrgent\(i\);/);
   // ...and the DOT follows the stored priority, whatever the band: an urgent draft, blocked agent, goal or wait drew regular's sage (2026-10-26)
-  assert.match(view, /const urgentDot = !i\.settling && \(hot \|\| priorityOf\(i\.priority\) === "urgent"\);/);
+  // ...until the row is answered or done (walk 25, 2026-11-26) - priority.urgentMark, by the row's own status (priority.test.mjs)
+  assert.match(view, /const urgentDot = urgentMark\(i, hot, st\);/);
   assert.match(view, /urgentDot \? "urgent" : imp \? "important" : ""/);
   assert.match(view, /data-tq-urgent=\{urgentDot \? "" : undefined\}/);
   assert.match(view, /aria-label=\{urgentDot \? `\$\{i\.title\} - urgent` : imp \? `\$\{i\.title\} - important` : undefined\}/);

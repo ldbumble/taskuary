@@ -192,7 +192,7 @@ const withKids = (ss) => ss.filter(isWork).flatMap((s) => [s, ...withKids(s.kids
 const workRows = (parts) => (parts || []).flatMap((p) => (p.type === "edit" ? [p] : p.type === "work" ? withKids(p.steps) : []));
 // ...AND ITS ONE LINE SAYS THE ROWS IT OPENS ON (the real-Claude walk, 2026-11-19: "3 steps - ran 2 commands, used a tool" opened on two rows,
 // and "1 step - used a tool" named nothing): counted from those rows, in their own words - the first few, then how many more
-const FEW = 3;
+const FEW = 3, LEADS = "skill";
 const lower = (t) => String(t || "").replace(/^[A-Z](?![A-Z])/, (c) => c.toLowerCase());
 // ...and rows of one kind say it once, counted (walk 5: "read 3 web pages, read 4 web pages" - two runs of reads cut by a sentence)
 const KIND_SAID = { read: (k) => `read ${plural(k, "file")}`, page: (k) => `read ${plural(k, "web page")}`, run: (k) => `ran ${plural(k, "command")}`,
@@ -206,6 +206,9 @@ export const foldLine = (parts) => {
   if (!n) return "";
   const kinds = [], by = new Map();
   for (const r of rows) { const k = r.type === "edit" ? "edit" : r.kind; if (!by.has(k)) { by.set(k, []); kinds.push(k); } by.get(k).push(r); }
+  // ...AND THE SKILL IT USED LEADS (walk 25, 2026-11-26: which skill did a job was said by one AI in its own words and by the others not at
+  // all): his skill read by name (agentSteps `skill`) is named first, wherever in the turn it was read - never lost in "and 3 more"
+  kinds.sort((x, y) => (y === LEADS) - (x === LEADS));
   // ...and a row that is its command (agentSteps `code`) is counted, never quoted: the line read "1 step - ran $p = '..\..\attachments…'" (walk 18)
   const words = kinds.flatMap((k) => { const rs = by.get(k), c = rs.reduce((t, r) => t + callsOf(r), 0);
     return (rs.length > 1 || rs.some((r) => r.code)) && KIND_SAID[k] ? [[KIND_SAID[k](c), c]] : rs.map((r) => [lower(r.summary), callsOf(r)]); }).filter(([w]) => w);

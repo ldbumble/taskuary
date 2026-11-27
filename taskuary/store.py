@@ -197,6 +197,13 @@ def _fold(value):
 
 
 REVIEW_COLS = ('TaskId', 'MessageId', 'RunId', 'Kind', 'DraftText', 'FinalText', 'Status', 'Reason', 'Deliver', 'Origin', 'NextStep')
+EDIT_PARTS = ('text', 'cc', 'bcc', 'subject', 'vals', 'fields', 'words', 'answers')      # what a card lets him change (heldEdits.js)
+def his_edit(rv) -> dict:
+    "What he has typed into review `rv`'s card and not pressed yet (Store.hold_review_edit) - {} for a card as filed."
+    try: e = json.loads((rv or {}).get('OwnerEdit') or '{}')
+    except (TypeError, ValueError): e = {}
+    return e if isinstance(e, dict) else {}
+def his_words(rv) -> str: return str(his_edit(rv).get('text') or '').strip()      # ...the words among it: a box he emptied holds none
 EMPTY_DRAFT = 'the draft came back empty'     # update_review_draft's refusal: the card's plain line reads it (sendState.draftState)
 POLICY_COLS = ('Name', 'Kind', 'Pattern', 'Action', 'Reason', 'SortOrder', 'Active', 'Mailbox')
 SOURCE_COLS = ('Channel', 'Address', 'Owner', 'ConnectorId', 'Active', 'ConfigJson')
@@ -1323,6 +1330,11 @@ class SQLiteStore:
             # ...and what an ACT's press failed on (review_act_failed): it lived only in the answer to that press - a reload drew the card as
             # if never pressed, and its agent was told nothing (the spine audit, 2026-11-09). Read only while the review still waits
             if 'ActError' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN ActError TEXT')
+            # ...and WHAT HE HAS TYPED INTO A WAITING CARD, NOT PRESSED YET (hold_review_edit): it lived in the page alone, so nothing here knew
+            # the card's words were his - a later draft was written over them, and a press from another surface sent the generated ones
+            if 'OwnerEdit' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN OwnerEdit TEXT')
+            # ...and that its failed press is his to TRY AGAIN, once (review_act_failed `retry`: a failure a second try could get past)
+            if 'ActRetry' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN ActRetry INTEGER')
             # ...and the agent's word that the reply is NO LONGER NEEDED (someone else answered, the owner already did) - kept as the why
             if 'NotNeeded' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN NotNeeded TEXT')
             # ...and the BULK CARD it is one row of (bulkcard.py): many of the same act raised together, one card, one press for them all
@@ -5957,6 +5969,7 @@ class SQLiteStore:
         if not str(draft or '').strip():
             self.set_review_draft_error(rid, EMPTY_DRAFT)
             return False
+        if his_words(self.get_review(rid)): return False     # HIS WORDS ARE IN ITS BOX: no draft is written over them
         fp = None if files in (None, ...) else json.dumps({'named': [str(f) for f in files]})
         self._exec("UPDATE review SET FilesPromised=CASE WHEN ? THEN ? WHEN DraftText IS ? THEN FilesPromised END, DraftText=?, RunId=?, DraftError=NULL, DraftNeeds=NULL, NotNeeded=NULL, Versions=NULL, "
                    f"DraftBy=?, {_DRAFT_AT} WHERE ReviewId=? AND DeliveryClaim IS NULL AND IFNULL(DeliveryState,'') NOT IN ('sending','unknown','sent')",
@@ -6035,16 +6048,40 @@ class SQLiteStore:
         self._review_changed(rid)
     def set_review_versions(self, rid, versions: list):
         "The versions of review `rid`'s words its agent gave for him to pick from (agenttools._many) - the first stands in its box; None for none."
+        if versions and his_words(self.get_review(rid)): return     # ...nor are versions set over his own words
         self._exec('UPDATE review SET DraftText=?, Versions=? WHERE ReviewId=?', (versions[0], json.dumps(versions), rid)) if versions else \
             self._exec('UPDATE review SET Versions=NULL WHERE ReviewId=?', (rid,))
         self._review_changed(rid)
     def set_review_next_step(self, rid, then):
         "The agent's own step after his press on review `rid` (card.raising), None for none."
         self._exec('UPDATE review SET NextStep=? WHERE ReviewId=?', (then or None, rid))
-    def review_act_failed(self, rid, error, by):
-        "An act's press that failed: kept on the review, which still waits - with who pressed and when, as a failed send keeps them (finish_review_delivery)."
-        self._exec("UPDATE review SET ActError=?, DecidedBy=?, DecidedAt=? WHERE ReviewId=? AND Status IN ('pending','held','superseded')", (str(error or '')[:300] or None, by, _now(), rid))
+    def review_act_failed(self, rid, error, by, retry: bool = False):
+        """An act's press that failed: kept on the review, which still waits - with who pressed and when, as a failed send keeps them
+        (finish_review_delivery). `retry`: its card offers Try again (ActRetry 1) - once: tried again it is 2, and the try that fails too is over."""
+        self._exec("UPDATE review SET ActError=?, DecidedBy=?, DecidedAt=?, ActRetry=CASE WHEN ? THEN 1 ELSE ActRetry END WHERE ReviewId=? AND Status IN ('pending','held','superseded')",
+                   (str(error or '')[:300] or None, by, _now(), bool(retry), rid))
         self._review_changed(rid)
+    def review_try_again(self, rid) -> bool:
+        "His Try again on an act whose press failed (proposals.retryable): it waits again as it stood, its one second try spent."
+        with self.lock:
+            cur = self.cx.execute("UPDATE review SET Status='pending', ActRetry=2, FinalText=NULL, DecideNote=NULL WHERE ReviewId=? AND Status='superseded' AND ActRetry=1", (rid,))
+            self.cx.commit(); self._writes += 1
+        if cur.rowcount: self._review_changed(rid)
+        return bool(cur.rowcount)
+    def hold_review_edit(self, rid, edit) -> bool:
+        """WHAT HE TYPED INTO A WAITING CARD IS HIS, FROM THE KEYSTROKE (the owner, 2026-11-26: no edit of his is ever written over):
+        `edit` is the card as he has left it and not pressed yet - {text, cc, bcc, subject, vals, words, answers}, only what he changed; None or
+        nothing in it takes it back. Kept on the review while it waits: no draft is written over it (update_review_draft), and a press that
+        carries no words of its own sends these (verdicts._decide). False when the card no longer waits."""
+        e = {k: v for k, v in (edit or {}).items() if k in EDIT_PARTS and v is not None}
+        with self.lock:
+            cur = self.cx.execute("UPDATE review SET OwnerEdit=? WHERE ReviewId=? AND Status IN ('pending','held')", (json.dumps(e) if e else None, rid))
+            self.cx.commit(); self._writes += 1
+        if cur.rowcount: self._review_changed(rid)
+        return bool(cur.rowcount)
+    def his_words_back(self, rid):
+        "His own ask for other words (Redraft, a rewrite he asked for) takes the ones he typed back: the draft written for it stands in the box."
+        if his_words(rv := self.get_review(rid)): self.hold_review_edit(rid, {**his_edit(rv), 'text': None})
     def review_result(self, rid, final) -> bool:
         "What came of an act already pressed (cardqueue.done): its FinalText, its status as it was."
         with self.lock:

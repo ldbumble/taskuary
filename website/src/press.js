@@ -4,6 +4,7 @@
 // next; and six had no patience at all, so behind a stalled server their button spun for ever.
 // One post, one patience, one reading of the answer - `kind`, which every card switches on. No React, so it runs under bare node.
 import { DECIDE_TIMEOUT, timedOut } from "./sendState.js";
+import { savedEdit } from "./heldEdits.js";
 
 //   ok       it landed
 //   partial  it landed, and what rode with it did not (a close-out went, its reply was refused): `why` says so
@@ -23,7 +24,8 @@ const post = async (api, url, body, wait) => {
   try { return outcomeOf((await api.post(url, body, { timeout: DECIDE_TIMEOUT * Math.max(1, wait) })).data); }
   catch (e) { return outcomeOf(null, e); } };
 // `wait`: how many times the one patience this press is given - an act that runs something takes longer than a reply handed to its provider
-export const press = (api, rid, body, wait = 1) => post(api, `/api/reviews/${rid}/decide`, { final_text: null, note: null, ...body }, wait);
+// ...what he typed into the card is on the server before its press is (heldEdits.js): a press with no words of its own sends his
+export const press = async (api, rid, body, wait = 1) => { await savedEdit(rid); return post(api, `/api/reviews/${rid}/decide`, { final_text: null, note: null, ...body }, wait); };
 // ...and a turn's held steps, approved or dismissed together: the same decide door, the rest of the card's steps with it (`steps`) - it stops at
 // the first that fails, and `why` is that step's
 export const pressSteps = async (api, ids, verb) => { const o = await press(api, ids[0], { verb, steps: ids }, ids.length);

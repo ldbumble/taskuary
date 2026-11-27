@@ -36,6 +36,13 @@ def _p(r) -> dict:
     return d if isinstance(d, dict) else {}
 
 
+def _pressed(r) -> dict:
+    "An act as he pressed it (its FinalText: what went, or what failed with his words on it) - {} for one not pressed."
+    try: d = json.loads(r.get('FinalText') or '{}') or {}
+    except (TypeError, ValueError): d = {}
+    return d if isinstance(d, dict) else {}
+
+
 def handed(r: dict) -> bool:
     """PRESSED IS NOT DONE (walk 6, 2026-11-23: Post via the browser on a LinkedIn card approved it, and its agent was told "Done 7:31 AM: post to
     LinkedIn" in the very message asking it to go and post it; the X card came forward as if it had gone, and the Assistant's list of what
@@ -452,8 +459,12 @@ SETTLED = 6                     # the settled cards told, newest last: enough th
 
 def _words(r) -> str:
     "A card's own words, as its card shows them: what went, else what waits - '' for an act with none."
-    if r.get('Kind') == 'action': w = (p := _p(r)).get('text') or p.get('body') or ''
-    else: w = r.get('FinalText') or r.get('DraftText') or ''          # ...his own words where he changed them, sent or not
+    from .store import his_words
+    mine = his_words(r) if r.get('Status') in ('pending', 'held') else ''       # ...what he has typed into it, not pressed yet
+    # ...an act's in the key its card's box edits (connectorcatalog.text_key: a close-out's `comment` was never said)
+    from .connectorcatalog import action_for, text_key
+    if r.get('Kind') == 'action': w = mine or (p := _pressed(r) or _p(r)).get(text_key(action_for(p.get('type'))) or 'text') or p.get('text') or p.get('body') or ''
+    else: w = mine or r.get('FinalText') or r.get('DraftText') or ''          # ...his own words where he changed them, sent or not
     w = ' '.join(str(w).split())
     return f'"{w[:300]}{"…" if len(w) > 300 else ""}"' if w else ''
 

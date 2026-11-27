@@ -279,9 +279,17 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
     # ...and one the owner has prompted past is old news (the owner, 2026-11-10: "The second you write ptompt on email action it should go gray and
     # then it should generate new email action box under it with new email.."): the agent's letter is a new card in its turn, the old one its
     # record, as a reply's is (wrapup.agent_reply); saved twice in its own turn it is rewritten in place
+    # ...AND ONE HE HAS TYPED HIS OWN WORDS INTO IS HIS (store.hold_review_edit; wrapup.agent_reply's rule for a reply): never rewritten under
+    # him - his version is closed as replaced with his words on it, the agent's letter is a new card, and the agent is told what he had left
+    his = ''
     if rv and rv.get('Status') == 'pending' and agent != 'owner':
         from . import wrapup
-        if wrapup._turn_after(store, tid, rv): store.decide_review(rv['ReviewId'], 'closed_unsent', None, agent, note=wrapup.REPLACED); rv = None
+        from .store import his_words
+        # ...only where the agent wrote OTHER words (the owner, 2026-11-26): the same letter saved again is no rewrite - his version stands
+        from .signatures import agent_signed
+        same = wrapup._words(rv.get('DraftText')) == wrapup._words(agent_signed(store, rv, text) or text)
+        his = '' if same else his_words(rv)
+        if his or wrapup._turn_after(store, tid, rv): store.decide_review(rv['ReviewId'], 'closed_unsent', his or None, agent, note=wrapup.REPLACED); rv = None
     if rv and rv.get('Status') == 'pending':
         rid = rv['ReviewId']
         if not store.set_review_deliver(rid, deliver): return {'ok': False, 'why': 'that email is already being sent'}
@@ -296,7 +304,7 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
         text = agent_signed(store, store.get_review(rid), text) or text
     store.update_review_draft(rid, text, None, by=f'agent:{agent}')
     return {'ok': True, 'review_id': rid, 'slot': hit['id'], 'added': added, **(routine_sends(store, tid, rid, agent, missing) if sends else {}),
-            **({'to_missing': to_missing(missing)} if missing else {}),
+            **({'to_missing': to_missing(missing)} if missing else {}), **({'replaced_the_owners_version': his} if his else {}),
             **({'rewrote': rid, 'says': f"This rewrote your earlier email to {to} in this turn - one card stands, holding these words. For a second, "
                                         f"separate email to them, call again with slot=\"{NEW_SLOT}\"."} if rewrote == rid else {})}
 NEW_SLOT = 'new'                 # propose (kind email)'s `slot` for a second letter to someone this turn already wrote to

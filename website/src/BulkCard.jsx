@@ -7,6 +7,7 @@ import { MovedPast } from "./PassedCard.jsx";
 import { CardLine, ReviewCard } from "./Artifact.jsx";
 import { DIM, FAINT } from "./theme.jsx";
 import api from "./api";
+import { savedEdit } from "./heldEdits.js";
 
 // WHAT ONE CALL RAISED TOGETHER IS ONE CARD (the owner, 2026-11-26; taskuary/cardqueue.py sets): DIFFERENT acts - the same post for X, for Reddit,
 // for LinkedIn - are a tab each in the one frame (CardLine), each tab the card of its own act with its own press; the server says which
@@ -30,7 +31,9 @@ export default function BulkReview({ rows = [], tid, onChanged, past: given = fa
   const states = raw.map(([r, s]) => [r, s.aside ? { waiting: true } : s]), waiting = states.filter(([, s]) => s.waiting), n = waiting.filter(([r]) => !skip.has(r.ReviewId)).length;
   const go = async () => {
     setBusy(true); setErr("");
-    try { const { data } = await api.post(`/api/reviews/batch/${key}/run`, { skip: [...skip].filter((id) => waiting.some(([r]) => r.ReviewId === id)) }); setRun(data); }
+    // ...each row goes as he left it: what he typed into one is on the server before the run reads it (heldEdits.js)
+    try { await Promise.all(waiting.map(([r]) => savedEdit(r.ReviewId)));
+      const { data } = await api.post(`/api/reviews/batch/${key}/run`, { skip: [...skip].filter((id) => waiting.some(([r]) => r.ReviewId === id)) }); setRun(data); }
     catch (e) { setErr(e?.response?.data?.detail || "It did not start - try again"); }
     finally { setBusy(false); onChanged?.(); }
   };

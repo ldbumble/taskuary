@@ -63,11 +63,13 @@ def _fail(r):
         said = body.get('message') or body.get('error_description') or json.dumps(body)[:300]
     except ValueError:
         said = (r.text or '')[:300]
-    if r.status_code in (401, 403):
-        raise RuntimeError(f'LinkedIn refused the token ({r.status_code}): {said}. '
-                           'Check the token has not expired (they last 60 days) and that the app '
-                           'has the Share on LinkedIn product added, which grants w_member_social.')
-    raise RuntimeError(f'LinkedIn returned {r.status_code}: {said}')
+    # ...with the status it answered, as a fact on the failure (proposals.passing reads it: a 5xx or a 429 is worth his second try, a 400 is not)
+    e = RuntimeError(f'LinkedIn refused the token ({r.status_code}): {said}. '
+                     'Check the token has not expired (they last 60 days) and that the app '
+                     'has the Share on LinkedIn product added, which grants w_member_social.'
+                     if r.status_code in (401, 403) else f'LinkedIn returned {r.status_code}: {said}')
+    e.status = r.status_code
+    raise e
 
 
 # TWO self-serve products, not one, and this is what stops a first sign-in dead:
@@ -208,10 +210,12 @@ def run_linkedin_post(cfg):
                              'targetEntities': [], 'thirdPartyDistributionChannels': []},
             'lifecycleState': 'DRAFT' if publish == 'draft' else 'PUBLISHED', 'isReshareDisabledByAuthor': False}
     # the picture goes up FIRST, and only after every check above: an upload LinkedIn keeps is a stray if the post is then refused here
+    # ...and its words for someone who cannot see it ride with a PICTURE only: LinkedIn takes no altText on a video, and refuses the whole post
+    # for one ("field override not supported for category") - a video's media is its urn alone
     if cfg.get('image_path'):
-        up = upload_video if is_video(cfg['image_path']) else upload_image
-        body['content'] = {'media': {'id': up(cfg, author, cfg['image_path']),
-                                     **({'altText': str(cfg['alt'])[:4000]} if cfg.get('alt') else {})}}
+        video = is_video(cfg['image_path'])
+        body['content'] = {'media': {'id': (upload_video if video else upload_image)(cfg, author, cfg['image_path']),
+                                     **({'altText': str(cfg['alt'])[:4000]} if cfg.get('alt') and not video else {})}}
     r = requests.post(f'{API}/rest/posts', headers=_headers(cfg), json=body, timeout=TIMEOUT)
     if not r.ok: _fail(r)
     # the id comes back in a header, not the body - the body is empty on a 201

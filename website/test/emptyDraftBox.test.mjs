@@ -9,9 +9,9 @@ import { draftState, EMPTY_LINE, replyCardShown } from "../src/sendState.js";
 
 test("a draft filed under an open card replaces the edit made on the one before it", () => {
   assert.equal(editAfterRefile({ text: "", held: null, keep: false }), null);                 // the emptied box shows the rewrite
-  assert.equal(editAfterRefile({ text: "Thanks Gail", held: null, keep: false }), null);
-  assert.equal(editAfterRefile({ text: "x", held: { text: "Seen, Gail" }, keep: false }), "Seen, Gail");   // the other card's edit on it
-  assert.equal(editAfterRefile({ text: "Mine", held: null, keep: true }), "Mine");           // beside a refreshed draft: the owner's stays
+  assert.equal(editAfterRefile({ text: "Mine", keep: true }), "Mine");           // beside a refreshed draft, or held for him: the owner's stays
+  assert.equal(editAfterRefile({ text: "  ", keep: true }), null);               // ...a box he emptied holds no words: the new draft shows
+  assert.equal(editAfterRefile({ text: "Thanks Gail", keep: false }), null);     // his own ask for other words took his back
 });
 
 

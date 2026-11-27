@@ -31,7 +31,11 @@ export const boxText = ({ text, draft, drafting, signature }) => text ?? (drafti
 // drawn again - a card left open kept its edit over every draft after it, and an emptied box stayed empty under "✓ Rewritten". What the box
 // holds once the filed draft changes: the edit held for this new one (another card's, heldOf), else the draft itself (null) - unless the
 // owner's edit is being shown beside a refreshed draft (`keep`: the interrupt's compare), which stays theirs
-export const editAfterRefile = ({ text, held, keep }) => (keep ? text : held ? held.text : null);
+// ...AND NEVER OVER WORDS HE TYPED (the owner, 2026-11-26: "never even overwrite an edit of a text for any card"): `keep` is every case but
+// his own ask for other words - the server holds what he typed and writes no draft over it (store.hold_review_edit), so a draft that did
+// change under words it no longer holds is the one he asked for. A box he emptied holds no words: the new draft shows
+export const editAfterRefile = ({ text, keep }) => (keep && String(text ?? "").trim() ? text : null);
+export const heldWords = (stored) => { try { return (typeof stored === "string" ? JSON.parse(stored) : stored)?.text ?? ""; } catch { return ""; } };
 
 // THE ASSISTANT'S REWRITE RECEIPT says Rewritten only when the review's text changed into something (server._rewritten); otherwise that it
 // did not come back, and why. `ref`: the task it landed on when that is not the one below. An older server says no `changed`: its draft decides.

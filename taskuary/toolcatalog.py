@@ -355,7 +355,8 @@ def block(store=None) -> str:
         'things fit and you cannot tell which, ask one short question and end with OPTIONS: first | second instead.',
         'Never both, never an unlisted tool. A task the owner names goes in params.ref ("TQ-0123"); otherwise',
         "the item on the table is the target. A decision about a DIFFERENT item than the table's puts the",
-        'words that name it in params.on. A SET of items goes in params.select (SELECT below).',
+        'words that name it in params.on, a SET in params.select (SELECT below); params.correction: true',
+        'when their words correct what was done.',
         '',
         'WHERE THINGS ARE - look before you guess:',
     ]

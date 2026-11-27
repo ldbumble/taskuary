@@ -882,6 +882,31 @@ class ClosingTests(unittest.TestCase):
         self.assertIsNone(s.get_settings().get('assistant_dock_task_id') or None, 'no chat was opened to say it in')
         self.assertEqual(last_receipt(s), '')
 
+    def _corrected(self, *answers, flag=True):
+        """'that's wrong - I already sent Paula the answer' on the desk: the model's answers in turn, its first a close marked (or not) a correction."""
+        s = store(); t, key = self._wrapped(s); asked = []
+        first = 'CALL: ' + json.dumps({'kind': 'close_note', 'params': {'text': 'Paula has it', **({'correction': True} if flag else {})}})
+        said = iter((first,) + answers)
+        def llm(system, user, **k): asked.append(user); return next(said, '')
+        with mock.patch.object(server, 'store', s):
+            out = concierge.say(s, "that's wrong - I already sent Paula the answer yesterday", key=key, llm=llm)
+        return s, t, out, asked
+
+    def test_a_turn_the_model_marks_a_correction_never_closes_and_the_model_is_told_what_is_open_instead(self):
+        """The real-model check, 2026-11-27: a correction of what was done turned into Close with a note once COUNSEL stopped saying so."""
+        s, t, out, asked = self._corrected('You sent Paula the answer yesterday - it stays open.')
+        self.assertEqual(s.get_task(t)['Status'], 'waiting')
+        self.assertIn(concierge.CORRECTED.format(what='task.complete'), asked[-1])
+        self.assertEqual(out['say'], 'You sent Paula the answer yesterday - it stays open.')
+
+    def test_the_retry_closing_again_is_dropped_and_said_as_nothing_put_down(self):
+        s, t, out, _ = self._corrected('CALL: ' + json.dumps({'kind': 'next', 'params': {}}))
+        self.assertEqual(s.get_task(t)['Status'], 'waiting'); self.assertEqual(out['say'], concierge.UNMOVED)
+
+    def test_an_unmarked_close_still_puts_it_down_the_mark_is_the_models_never_a_word_list(self):
+        s, t, out, asked = self._corrected(flag=False)
+        self.assertEqual(s.get_task(t)['Status'], 'done'); self.assertEqual(len(asked), 1)
+
     def test_a_todo_with_a_task_behind_it_offers_mark_done(self):
         """A promise made in a chat is a to-do on your list; its card offered Send to agent, Remind me and Next, and Next
         read as done - the owner walked past two promises believing they were closed (2026-10-15)."""

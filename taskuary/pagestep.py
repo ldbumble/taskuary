@@ -30,6 +30,12 @@ def card_of(store, tid: int, request_id) -> dict | None:
     return next((r for r in _cards(store, tid) if json.loads(r['DraftText']).get('request') == str(request_id)), None)
 
 
+def card_id(store, tid: int, request_id) -> int | None:
+    "The card of the page step `request_id` on task `tid`, whatever became of it - its press is said by it, never by a line under it."
+    rows = store._rows("SELECT ReviewId, DraftText FROM review WHERE TaskId=? AND Kind='action' AND DraftText LIKE ?", (int(tid), f'%"{ACT}"%'))
+    return next((r['ReviewId'] for r in rows if json.loads(r['DraftText'] or '{}').get('request') == str(request_id)), None)
+
+
 def sync(store, tid: int) -> None:
     """Each step handed to him on a page has its card, and a card whose step has ended is settled by how it ended: answered (his I'm done, the
     page moving on, the sign-in going in) it is done; taken back or overtaken, withdrawn. Derived from the requests as they stand, on every

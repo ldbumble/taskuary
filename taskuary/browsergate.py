@@ -1614,16 +1614,19 @@ def done(store, tid: int, rid: str) -> bool:
     agent is told by Taskuary that they SAY it is done: nothing saw the page move, so it looks first. A resting agent is started on it.
     False when the hand-over was closed already (a second press, or the watch got there first). On a page that is gone (shown_ask) the press
     is its Try again: the agent opens the page again and hands the step back."""
-    from . import browserview, buttons, workerstate as ws
+    from . import browserview, buttons, pagestep, workerstate as ws
     req = next((r for r in ws.open_requests(ws.events(store, tid)) if r['RequestId'] == rid), None)
     lost = bool(req) and gone(req['Sid'], rid)
+    # ...HIS PRESS IS SAID BY ITS CARD (the owner's rules, part 4; 2026-11-27: "if you write something it's not the card, not below it"): the step's
+    # card reads Done, and "You pressed I'm done on <site>" stood under it - the row names the card, as a card's own act does (proposals.execute)
+    card = {'review': c} if (c := pagestep.card_id(store, tid, rid)) else {}
     h = _close(store, tid, rid, 'Try again' if lost else browserview.TURN_DONE)
     # ...A PRESS ON A HAND-OVER ALREADY CLOSED IS STILL HIS PRESS (walk 5, 2026-11-19: "I'm done" left no line and nothing moved for a minute -
     # the watch had closed the hand-over a beat before): a line in his voice, and the agent told to look and go on - never a press into nothing
     if not h:
         if time.time() - _DONE_AT.get(int(tid), 0) < 10: return True          # ...a second press of the same Done: said once
         _DONE_AT[int(tid)] = time.time()
-        store.audit('task', tid, 'browser_act_pressed', 'owner', 'human', {'site': 'the page', 'btn': '', 'by': 'done'})
+        store.audit('task', tid, 'browser_act_pressed', 'owner', 'human', {'site': 'the page', 'btn': '', 'by': 'done', **card})
         _tell(store, tid, f"The owner pressed {browserview.TURN_DONE} on the page.", wake=True)
         return True
     if lost:
@@ -1637,7 +1640,7 @@ def done(store, tid: int, rid: str) -> bool:
     if h.get('tab'): browserview.switch_tab(h['sid'], h['tab'])
     step = f"the step you handed them ({h.get('what') or 'on the page'})"
     _DONE_AT[int(tid)] = time.time()
-    store.audit('task', tid, 'browser_act_pressed', 'owner', 'human', {'site': h['site'], 'btn': '', 'by': 'done'})
+    store.audit('task', tid, 'browser_act_pressed', 'owner', 'human', {'site': h['site'], 'btn': '', 'by': 'done', **card})
     _tell(store, tid, f"The owner pressed {browserview.TURN_DONE}: they say they finished {step} on the page. Taskuary did not see the page move.", wake=True)
     return True
 

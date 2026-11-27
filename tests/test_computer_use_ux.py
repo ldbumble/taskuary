@@ -341,7 +341,11 @@ class SignedInIsAPressOnEveryAgent(unittest.TestCase):
         self.assertTrue(out['delivered'], out)
         # ...told as the press it is (round 3, 2026-11-22: a press with nothing typed was told "the owner signed in on the page themselves")
         self.assertEqual(len(typed), 1); self.assertTrue(typed[0][1].startswith('The owner pressed Signed in on the toll.example page'), typed)
-        self.assertTrue(any('You pressed Signed in on toll.example' in (c.get('Body') or '') for c in s.list_comments(tid)))
+        # ...and nothing under its card in the chat (the owner, 2026-11-27): no line of his, none of Taskuary's - only the task's record keeps it
+        from taskuary import general
+        self.assertEqual([c['Body'] for c in s.list_comments(tid, internal=True) if c.get('ActorType') == general.USER_TYPE], [])
+        self.assertEqual(general.press_lines(s, tid), [])
+        self.assertTrue(any('You pressed Signed in on toll.example' in (c.get('Body') or '') for c in s.list_comments(tid) if c.get('ActorType') == 'agent'))
 
     def test_other_words_to_a_sign_in_ask_stay_the_owners(self):
         self.assertTrue(signin.said_done('signin:toll.example', ' signed in. '))

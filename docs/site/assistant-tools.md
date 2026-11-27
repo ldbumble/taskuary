@@ -79,7 +79,7 @@ The "Send to coding agent" button: send it to a coding agent; without it, its ca
 
 ### `not_ours`
 
-The "Not for me" button: file it, just this once - its card asks whether from now on, or as a rule.
+The "Not for me" button: file it, just this once - the put-down when no scope was said ("ignore it"); its card then asks how far: from now on, or as a rule.
 
 <p class="runs">Brings up its button for you to press.</p>
 

@@ -152,6 +152,18 @@ class Assistant(unittest.TestCase):
     def test_off_repos_list_says_why(self):
         self.assertIn('Developer mode', concierge.read_op(self.s, 'repos.list', {}))
 
+    def test_off_a_turn_that_read_the_repositories_and_ended_in_words_is_send_to_agent_never_i_cant(self):
+        """The real-model check, 2026-11-27: "review the widgets repo on GitHub and tell me what we can use" read repos.list with Developer
+        mode off and answered "I can't review the widgets repo from here" - nothing lit, nothing started."""
+        from taskuary import server
+        said = iter(['CALL: {"kind": "repos.list", "params": {}}', "I can't review the widgets repo from here. Developer mode is off."])
+        ask = 'review the widgets repo on GitHub and tell me what we can use for the portal'
+        with mock.patch.object(server, 'store', self.s), mock.patch.object(concierge, '_start_agent', return_value={'say': 'started'}) as start, \
+             mock.patch.object(concierge, '_made_now', return_value={'say': 'started'}) as made:
+            out = concierge.say(self.s, ask, llm=lambda *a, **k: next(said, ''))
+        self.assertNotIn("can't", out['say'])
+        self.assertTrue(start.called or made.called, out)
+
     def test_off_the_counsel_says_where_the_switch_is(self):
         with mock.patch.object(counsel, 'load', return_value='# Mine\n\n- Hand coding work to the coding agent.'):
             self.assertTrue(counsel.for_chat(self.s).endswith(counsel.NO_DEV))

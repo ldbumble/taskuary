@@ -77,7 +77,8 @@ def check(store, say: list, llm=None, memo: str = None) -> tuple:
     for s in say:
         if not _model(s): keep.append(s); continue
         a, k = s.get('action') or {}, s.get('kind') or 'idea'
-        if k in spent: held.append((s['key'], f"its kind ({k}) is under 80% useful lately - one a day")); continue
+        # ...a line the look already landed was counted when it landed (spent_today reads the idea rows): its day's one is itself
+        if k in spent and not s.get('landed'): held.append((s['key'], f"its kind ({k}) is under 80% useful lately - one a day")); continue
         if k in quiet: spent.add(k)
         if (t := touched(store, a)): held.append((s['key'], f'the owner acted on it in the last day ({t})')); continue
         # ...a line the OWNER'S OWN MEMORY asks for (a What to bring up or a Promises line it rests on) and an unkept promise are

@@ -681,6 +681,19 @@ class TheOwnerSignsInOnThePage(Asking):
         self.wait_for(lambda: typed)
         self.assertEqual(typed, [('bank.example', USER, PW)])
 
+    def test_his_signed_in_on_the_steps_card_is_said_by_the_card_never_a_line_under_it(self):
+        """The owner, 2026-11-27: "if you write something it's not the card, not below it". He pressed the sign-in step's card; the card read
+        done, and a trigger line filed for the chat agent's next turn stood under it: "You pressed Signed in on <site>." The agent is told once."""
+        from taskuary import card, general, pagestep
+        sess = self.chat(); p = self.ask(sess); pagestep.sync(self.s, self.tid)
+        step = pagestep.card_of(self.s, self.tid, p['request_id'])['ReviewId']
+        with mock.patch.dict('taskuary.terminal.SESSIONS', {'sess1': sess}), mock.patch.object(signin, 'keep_typed', return_value=''):
+            self.assertTrue(card.press(self.s, step, 'approve')['ok'])
+        self.assertEqual(len(sess.said), 1); self.assertTrue(sess.said[0].startswith('The owner pressed Signed in on the bank.example page'), sess.said)
+        self.assertEqual(self.s.get_review(step)['Status'], 'approved', 'the card shows his press')
+        self.assertEqual([c['Body'] for c in self.s.list_comments(self.tid, internal=True) if c.get('ActorType') == general.USER_TYPE], [])
+        self.assertEqual(general.press_lines(self.s, self.tid), [])
+
     def test_a_password_the_site_refused_is_not_kept_and_another_sites_form_is_not_heard(self):
         sess = self.chat(); p = self.ask(sess)
         # sent on a lookalike's page: not heard. Sent on the site, and the form comes back: not past, nothing kept, the ask stays

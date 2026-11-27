@@ -36,7 +36,8 @@ class DoneIsAPress(unittest.TestCase):
     def open(self): return [r['RequestId'] for r in ws.open_requests(ws.events(self.s, self.tid))]
 
     def test_done_on_the_view_closes_the_step_and_is_never_a_line_the_owner_typed(self):
-        rid = self.turn()
+        from taskuary import pagestep
+        rid = self.turn(); pagestep.sync(self.s, self.tid)            # ...the step's card, as the chat makes it (chatlog.advance)
         out = ws.answer(self.s, self.tid, rid, '', press=True)
         self.assertEqual((out['delivered'], out['state']), (True, 'delivered'))
         [(words, as_owner)] = self.heard()
@@ -44,11 +45,29 @@ class DoneIsAPress(unittest.TestCase):
         self.assertIn("The owner pressed I'm done", words); self.assertIn("tick the \"I'm not a robot\" box", words)
         self.assertIn('did not see the page move', words)
         self.assertEqual(self.said(), [], 'no bubble, and no line by Taskuary either')
-        # ...in the words of the button he pressed: the view's "I'm done" left "You pressed Done" (the overnight walk, 2026-11-11)
-        self.assertEqual(self.lines(), [f"You pressed I'm done on {SITE}."])          # ...a press, never "the step is finished" (the walk, 2026-11-22)
+        # ...and NO LINE UNDER ITS CARD (the owner, 2026-11-27: "if you write something it's not the card, not below it"): the card says it
+        self.assertEqual(self.lines(), [])
         self.assertEqual(self.open(), []); self.assertEqual(bg.HANDS, {})
         again = ws.answer(self.s, self.tid, rid, '', press=True)                  # a second press, or the watch got there first
         self.assertEqual((again['delivered'], again['state']), (False, 'resolved')); self.assertEqual(len(self.told), 1)
+
+    def test_his_im_done_on_the_steps_card_reads_done_there_with_no_line_under_it_and_the_agent_hears_it_once(self):
+        """The owner, 2026-11-27: "why do we have these words?? ... if you write something it's not the card, not below it". The agent handed
+        him "Review and click Save" as a card; he pressed I'm done; the card read Done - and under it the chat drew "You pressed I'm done on
+        <site>", and the agent heard the press twice: as that line's event and as Taskuary's note."""
+        from taskuary import card, pagestep
+        rid = self.turn(); pagestep.sync(self.s, self.tid)
+        step = pagestep.card_of(self.s, self.tid, rid)['ReviewId']
+        got = card.press(self.s, step, 'approve')
+        self.assertTrue(got['ok'], got)
+        [(words, _)] = self.heard(); time.sleep(.3)
+        self.assertEqual(len(self.told), 1, 'told once')
+        self.assertEqual(words.count("pressed I'm done"), 1, words)
+        self.assertEqual(self.s.get_review(step)['Status'], 'approved', 'the card shows his press')
+        self.assertEqual((self.lines(), self.said()), ([], []), 'and nothing is drawn under it')
+        # ...the press is still on the record, said by its card
+        [row] = self.s._rows("SELECT Detail FROM audit WHERE EntityId=? AND Action='browser_act_pressed'", (self.tid,))
+        self.assertEqual(json.loads(row['Detail'])['review'], step)
 
     def test_his_done_puts_the_browser_back_on_the_steps_own_tab_before_the_agent_looks(self):
         """The owner, 2026-11-15: sites are tabs of one browser, and while a step was his he could show another tab - the agent, told to

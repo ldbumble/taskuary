@@ -119,10 +119,11 @@ MECHANICS = (
     "it. A money idea always has one; any other when the evidence allows, else expr \"\". An idea whose quote, number or stake does not hold is dropped.\n"
     "Each idea: family, title (one line to the owner, under 100 characters), evidence (what was seen, with the counts and dates, in plain "
     "words - no ids), quotes, counts ([] when none), stake, why (one sentence: why it matters, at what scale), next_step (concrete enough "
-    "for an agent to start: a draft, a query, a fix to build), pitch (one sentence the owner could say to their boss).\n"
+    "for an agent to start: a draft, a query, a fix to build), pitch (one sentence the owner could say to their boss), about_person (the "
+    "person the idea is about, by name, or null).\n"
     'Answer JSON only: {"reads": [{"tool": "search_mail", "q": "...", "sent": null, "days": null, "id": null, "name": null}], "ideas": []} '
     'to read more, or {"reads": [], "ideas": [{"family": "...", "title": "...", "evidence": "...", "quotes": [{"ref": "msg1", "quote": "..."}], '
-    '"counts": [], "stake": {"expr": "", "unit": "", "assume": []}, "why": "...", "next_step": "...", "pitch": "..."}]} when done.')
+    '"counts": [], "stake": {"expr": "", "unit": "", "assume": []}, "why": "...", "next_step": "...", "pitch": "...", "about_person": null}]} when done.')
 _COMMENT = re.compile(r'<!--.*?-->', re.S)
 GOALS = _COMMENT.sub('', (Path(__file__).parent / 'templates' / f'{ADVISOR_DOC}.md').read_text(encoding='utf-8')).strip()
 
@@ -141,7 +142,8 @@ _OBJ = lambda need, props: {'type': 'object', 'additionalProperties': False, 're
 WANT = {'name': 'lookout', 'schema': _OBJ(['reads', 'ideas'], {
     'reads': {'type': 'array', 'items': _OBJ(['tool', 'q', 'sent', 'days', 'id', 'name'], {
         'tool': {'type': 'string', 'enum': list(READS)}, 'q': _N('string'), 'sent': _N('boolean'), 'days': _N('integer'), 'id': _N('string'), 'name': _N('string')})},
-    'ideas': {'type': 'array', 'items': _OBJ(['family', 'title', 'evidence', 'quotes', 'counts', 'stake', 'why', 'next_step', 'pitch'], {
+    'ideas': {'type': 'array', 'items': _OBJ(['family', 'title', 'evidence', 'quotes', 'counts', 'stake', 'why', 'next_step', 'pitch', 'about_person'], {
+        'about_person': _N('string'),
         'family': {'type': 'string', 'enum': list(FAMILIES)}, **{k: {'type': 'string'} for k in ('title', 'evidence', 'why', 'next_step', 'pitch')},
         'stake': _OBJ(['expr', 'unit', 'assume'], {'expr': {'type': 'string'}, 'unit': {'type': 'string'}, 'assume': {
             'type': 'array', 'items': _OBJ(['n', 'what'], {'n': {'type': 'number'}, 'what': {'type': 'string'}})}}),
@@ -833,6 +835,10 @@ def verify(store, d: dict, seen: dict, counts: dict, fams: list) -> tuple:
         if k not in counts: return None, f"it counts \"{_one(c.get('search'), 40)}\", a search the run never made"
         if str(c.get('n')) != str(n): return None, f"it says {c.get('n')} for \"{_one(c.get('search'), 40)}\"; the mail holds {n}"
         held.add(str(n))
+    # ABOUT A PERSON, ONLY THE PATTERN (ADVISOR.md): an idea the model says is about someone stands on counts or dates - a count that held, or
+    # a number or date in what it quotes - never on a line read for what it may say about them (the real-model check, 2026-11-27)
+    if _one(d.get('about_person'), 80) and not (held or any(numbers(q['quote']) or _DATE.search(q['quote']) for q in qs)):
+        return None, 'it is about a person and rests on no count or date'
     backed = held | {str(len(refs))} | {n for r in refs for n in numbers(seen[r]) | _age(store, r)}
     st, why = stake(d.get('stake'), backed)
     if why: return None, why
@@ -1052,6 +1058,12 @@ def _hold(store, held_: list):
     if not held_: return
     rows = [{'family': x.get('family'), 'title': x.get('title'), 'why': w, 'at': _ts(_now())} for x, w in held_]
     store.set_setting(HELD_KEY, json.dumps((rows + held(store))[:HELD_CAP]), 'advisor')
+
+
+def hold_raised(store, rows: list, why: dict):
+    "Ideas a look raised that the post's second look held (ideacheck): put down by the Advisor, never posted, and in the held list the next look reads."
+    for r in rows: store.set_idea_status(r['IdeaId'], 'dismissed', 'advisor')
+    _hold(store, [({'family': r.get('Kind'), 'title': r.get('Text')}, why.get(r['Key']) or 'held by the second look') for r in rows])
 
 
 def _skipped(store, why: str, loud: bool):

@@ -76,7 +76,7 @@ def test_the_pass_reads_the_job_the_window_the_people_and_what_the_owner_said_be
     out = lookout.tick(s, llm, force=True)
     assert out == {'ran': True, 'raised': [], 'updated': [], 'held': [], 'calls': 1, 'deep': ['source:email']}, 'no idea is an answer, in one call'
     system, user = llm.seen[0]
-    assert 'credit' in system and 'communicate more' in system and 'diagnosis' in system, 'the bar is the prompt'
+    assert all(f'- {f}:' in system for f in lookout.FAMILIES), 'what it looks out for is the prompt'
     assert all(t in system for t in lookout.READS) and 'word for word' in system.lower(), 'it is told the tools it may read with, and that quotes are checked'
     assert JOB.splitlines()[1] in user
     assert '"Invoices waiting approval - week 0": 4 message(s)' in user and f"msg{ids['backlog'][0]}" in user, 'grouped, counted, citable'
@@ -718,13 +718,13 @@ def test_an_edited_advisor_md_line_reaches_the_look_and_the_post_and_an_empty_on
     lookout.tick(s, llm, force=True)
     system = llm.seen[0][0]
     assert 'Watch the vendor renewals at Northwind above all.' in system and '<!-- mine -->' not in system
-    assert 'communicate more' not in system, "the goals are his words, not the code's"
+    assert 'early_warning: a problem developing' not in system, "the goals are his words, not the code's"
     assert 'word for word' in system.lower() and all(t in system for t in lookout.READS), 'the evidence rules and the reads stay in code'
     post = []
     assistant.run(s, llm=lambda sy, u, **k: post.append(sy) or '{"say": []}', force=True)
     assert any('Watch the vendor renewals at Northwind above all.' in p for p in post if 'YOUR INSTRUCTION' in p), 'the twice-a-day post reads it too'
     s.save_doc('advisor', '<!-- only a comment -->\n', 'owner')
-    assert lookout.goals(s) == lookout.GOALS and 'never make one up' in lookout.goals(s), 'empty reads the shipped goals, never none'
+    assert lookout.goals(s) == lookout.GOALS and 'early_warning: a problem developing' in lookout.goals(s), 'empty reads the shipped goals, never none'
     assert 'advisor' in s.doc_names() and s.get_doc('advisor'), 'seeded like every owner document'
 
 
@@ -812,3 +812,36 @@ def test_the_look_may_ask_the_mailbox_itself_read_only(monkeypatch):
     text = lookout.read(s, rd('mailbox', name=VENDOR, sent=True, days=60), seen, counts)
     assert 'Old contract terms' in text and 'cite it as mailbox' in text and 'Please countersign' in seen['mailbox']
     assert lookout.read(s, rd('mailbox'), seen, counts).startswith('mailbox: say whose mail')
+
+
+def test_an_idea_about_a_person_stands_on_counts_or_dates_never_on_a_line_read_for_what_it_may_mean():
+    """The real-model check, 2026-11-27: ADVISOR.md no longer said that about a person it sees only the pattern. The model says which idea is
+    about someone (about_person); one whose quotes hold no number or date and claims no count is dropped - no word list reads the words."""
+    s, ids = world()
+    seen = {'msg900': 'Sorry for the slow reply - out again tomorrow, family thing. 3 replies late since 2026-11-02.'}
+    by = lambda quote, who='Ray Colton': lookout.verify(s, idea('early_warning', 'Ray is behind on the GL mapping', ['msg900'],
+                                                                 quotes=[{'ref': 'msg900', 'quote': quote}]) | {'about_person': who}, seen, {}, lookout.families(s))
+    assert by('out again tomorrow, family thing') == (None, 'it is about a person and rests on no count or date')
+    assert by('3 replies late since 2026-11-02')[0]['refs'] == ['msg900']
+    assert by('out again tomorrow, family thing', who=None)[0], 'an idea about no one is checked as before'
+
+
+def test_the_posts_second_look_reads_the_looks_ideas_too_and_one_it_holds_is_never_posted():
+    """ONE SECOND LOOK (the real-model check, 2026-11-27): the look's ideas joined the post "checked already, never judged again", so advice
+    that only restated one line, a real line quoted, went straight to the owner. The same ideacheck now reads both kinds of idea."""
+    from unittest import mock
+    s, ids = lookout_world.busy()
+    ph = f"msg{ids['phish'][-1]}"
+    raised = lookout.tick(s, brain({'reads': [rd('spend', q='phishguard')]}, {'ideas': [idea('money', 'PhishGuard charged invoice INV-2207 twice in 5 days - $380 to claim back', [ph],
+                                                   quotes=[{'ref': ph, 'quote': 'the same $380 twice in 5 days'}],
+                                                   stake={'expr': '380', 'unit': '$ once', 'assume': []})]}), force=True)['raised']
+    notes = []
+    def second(system, user, **k): notes.append(user); return '{"known": [1]}'
+    post = lambda system, user, **k: '{"verdicts": []}' if 'YOUR INSTRUCTION' not in system else json.dumps({'say': []})
+    with mock.patch('taskuary.llm.build_llm', return_value=second):
+        out = assistant.run(s, llm=post, force=True)
+    i = s.get_idea(raised[0])
+    assert notes and 'PhishGuard charged invoice INV-2207 twice' in notes[0], 'the look idea was read by the second look'
+    assert not i['MessageId'] and i['Status'] == 'dismissed' and i['DecidedBy'] == 'advisor' and not out.get('message_id')
+    assert {'key': i['Key'], 'why': 'the owner would already know it'} in out['reviewed']['held']
+    assert any(h['title'] == i['Text'] for h in lookout.held(s)), 'the next look reads why it was held'

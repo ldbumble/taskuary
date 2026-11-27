@@ -766,6 +766,7 @@ def parse_decision(text: str) -> tuple[str, dict | None]:
     # done" called close with ref TQ-0004 and the ref was thrown away (2026-11-02)
     if (on := str(p.get('on') or p.get('ref') or '').strip()): d['on'] = on
     if p.get('new') is True or str(p.get('new')).lower() == 'true': d['new'] = True  # a job of its own, not the item's hand-off
+    if _yes(p.get('correction')): d['correction'] = True                          # the model read the turn as a correction (moves_on)
     if verb in ('next', 'remember') and str(p.get('section') or '').strip(): d['section'] = str(p['section']).strip()[:40]   # a rail heading (rail_section); a memory's place
     return text[:m.start()].strip(), d
 
@@ -797,8 +798,27 @@ DEV_MODE_OFF = 'A general agent takes it - coding agents need Developer mode, in
 
 def handoff_verb(store, verb):
     """With no coding tool connected, a coding hand-off asked for anyway (a stale card, the model's word) IS Send to agent: the
-    offer was ours, so it is never answered "there is no coding agent on this computer" (B3, 2026-10-17)."""
-    return 'regular_agent' if verb == 'coding_agent' and store is not None and not _coding(store) else verb
+    offer was ours, so it is never answered "there is no coding agent on this computer" (B3, 2026-10-17).
+    ...and so is a look-up only a coding hand-off makes (repos.list): "review the widgets repo" read the repositories with Developer mode
+    off and ended "I can't" (the real-model check, 2026-11-27) - the turn that ends there with nothing done is the general agent's."""
+    from .toolcatalog import CODING_ONLY
+    return 'regular_agent' if verb in CODING_ONLY and store is not None and not _coding(store) else verb
+
+
+# A CORRECTION LEAVES THE ITEM WHERE IT STANDS (the real-model check, 2026-11-27): "that's wrong - I already sent Marcus the answer" closed
+# the task with a note once COUNSEL no longer said so. The model marks a correction (params.correction) as it reads any decision; a put-down
+# or Next on that turn is refused here and the model is told what is open to it instead - never a word list
+MOVES_ON = ('close', 'close_note', 'next', 'task.complete', 'item.settle')
+CORRECTED = ("Taskuary did not take {what}: the owner's words correct what was done, and a correction leaves the item where it stands - Mark done, "
+             "Close with a note and Next stay the owner's own presses. What the correction says can go on the item: task.check ticks or notes "
+             "its to-do, task.comment files a note; or answer in words with what is so.")
+UNMOVED = 'Nothing was put down - it stays where it was.'
+
+def moves_on(decision: dict | None, call: dict | None, marked: bool = False) -> str:
+    """The put-down or Next a correction asked for ('' when none): on a turn the model marked a correction, or any once `marked` (its retry)."""
+    if decision and (marked or decision.get('correction')) and decision.get('verb') in MOVES_ON: return decision['verb']
+    if call and (marked or _yes((call.get('params') or {}).get('correction'))) and call.get('kind') in MOVES_ON: return call['kind']
+    return ''
 
 
 def no_agent(store) -> str:
@@ -3348,7 +3368,7 @@ def read_op(store, kind: str, params: dict) -> str:
                 + NEWLINE + 'brains: ' + '; '.join(appfacts.brains(store)))
     if kind == 'repos.list':
         from . import agents as _ag, terminal as term
-        if not _coding(store): return f'{_ag.no_coding_why(store)} - there is no coding agent here, so no repositories to name.'
+        if not _coding(store): return f'{_ag.no_coding_why(store)} - {toolcatalog.NO_CODING}, which reads a public repository too.'
         repos = term.repo_map(store)
         return ('repositories (a coding_agent hand-off names one in `as`):' + NEWLINE
                 + NEWLINE.join(f'- {r}: {d}' for r, d in repos.items())) if repos else 'No repositories are set up.'
@@ -5991,7 +6011,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         ai = [] if DELIVERY.get() == PHONE else [connect_ai_chip()]
         return {'say': say_, 'options': [], 'chips': ai + (chips_for(store, item) or walk_chips(len(p['items']))), 'decision': None, 'open': '',
                 'no_brain': True}
-    reply, options, decision, call, did_read, failed = '', [], None, None, False, None
+    reply, options, decision, call, did_read, failed, coded = '', [], None, None, False, None, []
     try:
         # NO HUB NOTES PER TURN. Every turn carried whatever notes shared the owner's words - asked to research a
         # project, the model read internal notes on CLI flags and timeouts, and answered in that register (the
@@ -6059,6 +6079,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
             return parse_call(raw)
         got, call, reads = look_rounds(store, item, call, again, on_read=lambda c: (_strays(item, c), trace and trace('tool', c['kind'], {'params': c['params']})))
         if reads: raw, did_read = got, True
+        coded = [c['kind'] for c, _ in reads if handoff_verb(store, c['kind']) == 'regular_agent']
         # the budget is spent and it still wants to read: that is as far as this turn goes. A read is
         # never handed on to call_turn, which only knows operations that CHANGE something.
         out_of_reads = bool(call and toolcatalog.runs_now(call['kind']))
@@ -6093,6 +6114,17 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         logger.warning(f'concierge: the model pass failed - {e}'); failed = e
     if cancel is not None and cancel.is_set(): raise Stopped('stopped by the owner')
     if isinstance(failed, TurnOut): call = None          # ...the time is up: no look-up is run again for a question nobody will be asked
+    if not failed and (what := moves_on(decision, call)):
+        try: raw = _view_lines(str(llm(system, f"{table}\n\n{OWNER_SAYS}{text}\nYou called {what}. {CORRECTED.format(what=what)}",
+                                       max_tokens=MAX_TOKENS) or '').strip())
+        except Exception as e: logger.warning(f'concierge: the pass after a refused put-down failed - {e}'); raw = ''
+        raw, call = parse_call(raw); raw, decision = parse_decision(raw); reply, options = parse_options(raw)
+        if moves_on(decision, None, marked=True): decision = None
+        if moves_on(None, call, marked=True): call = None
+        if not (reply or call or decision): reply = UNMOVED
+    # A TURN THAT ASKED FOR CODING WORK WITH NO CODING HERE ENDS ON SEND TO AGENT, never on "I can't" (handoff_verb): it read a coding-only
+    # look-up and stopped there with words alone - the owner's words are the general agent's brief
+    if coded and not (failed or call or decision or options): decision, reply = {'verb': 'coding_agent', 'text': text, **({} if item else {'new': True})}, ''
     if call:
         # A MISS IS THE MODEL'S TO FIX, not the owner's to read. "No setting by that name - settings.list <group> names
         # them" is written for the model, and it reached the owner word for word (the 2026-09-24 audit). The model gets

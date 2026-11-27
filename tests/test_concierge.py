@@ -92,7 +92,7 @@ class TurnTests(unittest.TestCase):
         self.assertEqual(out['say'], 'Dana wants the corrected file; the draft below says "Attached." - I would send it.')
         self.assertEqual(out['options'], ['send it', 'redraft it'])
         # the model saw the item, the draft and the pile - and was told what it is
-        self.assertIn('I am Taskuary', seen['system']); self.assertIn('One item per turn', seen['system'])   # COUNSEL.md's own words now (PW-248/256), then the contract
+        self.assertIn('I am Taskuary', seen['system']); self.assertIn('## What I see', seen['system'])   # COUNSEL.md's own facts now (PW-248/256), then the contract
         self.assertIn('THE DRAFT', seen['user']); self.assertIn('Attached.', seen['user'])
         self.assertIn('Can you send the corrected file?', seen['user'])
         # shown once: a reply for your yes stays in the pipe, in its place - shown is not acted on, and nothing is "passed" (2026-10-30)
@@ -445,7 +445,7 @@ class BrainTests(unittest.TestCase):
             self.assertEqual(seen['resume'], 'sess-1')                                                   # the next turn resumes it
             self.assertIsNone(seen['cwd'])                                                               # a typed ask too: tools off, the assistant runs nothing
             self.assertNotIn('WHAT YOU CAN DO YOURSELF', seen['system'])
-            self.assertIn('A question gets a look-up first', seen['system'])       # COUNSEL.md's own words (PW-248/256); it said "I have no tools" until 2026-09-24
+            self.assertIn('Their press on a button does the acting', seen['system'])       # COUNSEL.md's own facts (PW-248/256); it said "I have no tools" until 2026-09-24
         s.set_setting('assistant_ai', 'connector:3', 't')
         self.assertTrue(concierge.is_cli(s))                                                            # the old dock's pick is not this page's
         s.set_setting(concierge.AI_KEY, 'connector:3', 't')
@@ -889,6 +889,31 @@ class ClosingTests(unittest.TestCase):
         self.assertEqual(s.get_task(t)['Status'], 'done')
         self.assertIsNone(s.get_settings().get('assistant_dock_task_id') or None, 'no chat was opened to say it in')
         self.assertEqual(last_receipt(s), '')
+
+    def _corrected(self, *answers, flag=True):
+        """'that's wrong - I already sent Paula the answer' on the desk: the model's answers in turn, its first a close marked (or not) a correction."""
+        s = store(); t, key = self._wrapped(s); asked = []
+        first = 'CALL: ' + json.dumps({'kind': 'close_note', 'params': {'text': 'Paula has it', **({'correction': True} if flag else {})}})
+        said = iter((first,) + answers)
+        def llm(system, user, **k): asked.append(user); return next(said, '')
+        with mock.patch.object(server, 'store', s):
+            out = concierge.say(s, "that's wrong - I already sent Paula the answer yesterday", key=key, llm=llm)
+        return s, t, out, asked
+
+    def test_a_turn_the_model_marks_a_correction_never_closes_and_the_model_is_told_what_is_open_instead(self):
+        """The real-model check, 2026-11-27: a correction of what was done turned into Close with a note once COUNSEL stopped saying so."""
+        s, t, out, asked = self._corrected('You sent Paula the answer yesterday - it stays open.')
+        self.assertEqual(s.get_task(t)['Status'], 'waiting')
+        self.assertIn(concierge.CORRECTED.format(what='task.complete'), asked[-1])
+        self.assertEqual(out['say'], 'You sent Paula the answer yesterday - it stays open.')
+
+    def test_the_retry_closing_again_is_dropped_and_said_as_nothing_put_down(self):
+        s, t, out, _ = self._corrected('CALL: ' + json.dumps({'kind': 'next', 'params': {}}))
+        self.assertEqual(s.get_task(t)['Status'], 'waiting'); self.assertEqual(out['say'], concierge.UNMOVED)
+
+    def test_an_unmarked_close_still_puts_it_down_the_mark_is_the_models_never_a_word_list(self):
+        s, t, out, asked = self._corrected(flag=False)
+        self.assertEqual(s.get_task(t)['Status'], 'done'); self.assertEqual(len(asked), 1)
 
     def test_a_todo_with_a_task_behind_it_offers_mark_done(self):
         """A promise made in a chat is a to-do on your list; its card offered Send to agent, Remind me and Next, and Next

@@ -330,6 +330,58 @@ class ChangeTests(unittest.TestCase):
         with mock.patch('taskuary.docsync.sync_connections'): proposals.execute(self.s, row, 'owner')
         self.assertEqual(workflows.definition(self.s, self.s.get_source(self.sid))['skill'], 'social-posts')
 
+    def test_a_change_never_renames_a_routine_unless_a_new_name_is_asked_for(self):
+        # walk 26, 2026-11-27, the real Claude CLI: "make my social posts punchier ... the posts my routine writes" - its ask named the routine
+        # and carried `title: "Make Social posts punchier"`, the heading it had given every earlier try of the ask (the task's own title); the
+        # card read "Name: Social posts -> Make Social posts punchier" and his Approve saved it
+        from taskuary import proposals
+        sid = routine(self.s, title='Social posts', agent='general', prompt='Write a post for each network.', daily_at='08:00', cron=None)
+        own = self.s.create_task({'Title': 'Make Social posts punchier', 'Kind': 'general', 'Status': 'open'}, 'o')
+        rv = proposals.queue(self.s, own, {'action': 'change_routine', 'routine': 'Social posts', 'name': 'Social posts', 'title': 'Make Social posts punchier',
+                                           'prompt': 'Write a punchy post for each network.', 'why': 'punchier'})
+        row = self.s.get_review(rv['reviewId']); p = json.loads(row['DraftText'])
+        self.assertNotIn('Name', [r['label'] for r in p.get('rows') or []]); self.assertNotIn('title', p.get('patch') or {}); self.assertNotIn('Make Social posts punchier', p['changes'])
+        with mock.patch('taskuary.docsync.sync_connections'): proposals.execute(self.s, row, 'owner')
+        src = self.s.get_source(sid); cfg = json.loads(src['ConfigJson'])
+        self.assertEqual((cfg['title'], src['Address'], cfg['prompt']), ('Social posts', 'Social posts', 'Write a punchy post for each network.'))
+        # ...a title alone changes nothing, and says so - never a card that renames
+        why = []
+        self.assertIsNone(proposals.queue(self.s, own, {'action': 'change_routine', 'routine': 'Social posts', 'title': 'Make Social posts punchier', 'why': 'y'}, refused=why))
+        self.assertIn('`rename`', why[0])
+        # ...and a new name asked for is its card's Name row, saved by the press
+        rv = proposals.queue(self.s, own, {'action': 'change_routine', 'routine': 'Social posts', 'rename': 'Weekly posts', 'why': 'he asked for the name'})
+        row = self.s.get_review(rv['reviewId']); p = json.loads(row['DraftText'])
+        self.assertIn({'label': 'Name', 'was': 'Social posts', 'now': 'Weekly posts'}, p['rows'])
+        with mock.patch('taskuary.docsync.sync_connections'): proposals.execute(self.s, row, 'owner')
+        self.assertEqual(json.loads(self.s.get_source(sid)['ConfigJson'])['title'], 'Weekly posts')
+
+    def test_a_report_is_not_renamed_by_an_asks_title_either(self):
+        from taskuary import proposals
+        sid = self.s.save_source({'Channel': 'report', 'Address': 'Cash on hand', 'Owner': 'o', 'Active': 1, 'ConfigJson': json.dumps(
+            {'type': 'quickbooks', 'title': 'Cash on hand', 'ai_prompt': 'Sum the bank balances.', 'daily_at': '08:00'})}, 'o')
+        own = self.s.create_task({'Title': 'Split the cash report by account', 'Kind': 'general', 'Status': 'open'}, 'o')
+        rv = proposals.queue(self.s, own, {'action': 'change_routine', 'routine': 'Cash on hand', 'title': 'Split the cash report by account',
+                                           'prompt': 'Sum the bank balances by account.', 'why': 'by account'})
+        p = json.loads(self.s.get_review(rv['reviewId'])['DraftText'])
+        self.assertNotIn('title', p['patch']); self.assertNotIn('Name', [r['label'] for r in p['rows']])
+        rv = proposals.queue(self.s, own, {'action': 'change_routine', 'routine': 'Cash on hand', 'rename': 'Cash by account', 'why': 'he asked'})
+        self.assertEqual(json.loads(self.s.get_review(rv['reviewId'])['DraftText'])['patch'], {'title': 'Cash by account'})
+
+    def test_a_routine_read_says_what_the_skill_it_uses_is(self):
+        # walk 26: the routine read "SKILL: social-posts" and the agent, asked to change how its posts are written, rewrote the routine's own
+        # 117 characters to 384, the skill's limits copied into them, and left the skill as it was. What the skill is to the routine is a fact
+        # of the routine - a page of its own, how long, read on every run - beside the instructions, which are the routine's
+        from taskuary import agenttools, skills
+        skills.write('social-posts', self.POSTS); self.addCleanup(lambda: (skills.delete('social-posts'), skills.purge(now=10 ** 12)))
+        routine(self.s, title='Social posts', agent='general', prompt='Write a post for each network.', skill='social-posts', daily_at='08:00', cron=None)
+        own = self.s.create_task({'Title': 'Make the posts punchier', 'Kind': 'general', 'Status': 'open'}, 'o')
+        read = agenttools.call(self.s, own, 'routines', {'name': 'Social posts'}, {})
+        line = next(l for l in read.splitlines() if l.startswith('SKILL: '))
+        self.assertIn(f'SKILL: social-posts - a skill of his, a page of its own ({len(self.POSTS):,} characters, read by the skills tool) that every run reads', line)
+        self.assertIn('INSTRUCTIONS (30 characters):\nWrite a post for each network.', read)
+        # ...and a routine with none says none, as before
+        self.assertIn('SKILL: none', agenttools.call(self.s, own, 'routines', {'name': 'Weekly review'}, {}))
+
     def test_the_editor_saves_by_the_same_road(self):
         with self.assertRaises(ValueError): workflows.save(self.s, {'SourceId': self.sid, 'ConfigPatch': {'flow': [{'id': 's1', 'kind': 'nope'}]}}, 'o')
 

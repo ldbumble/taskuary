@@ -397,6 +397,10 @@ def change_of(store, tid: int, p: dict) -> tuple:
     if not src: return {}, ('no routine is called that - name it by its title or number as Reports lists it' if p.get('routine') else
                             'change_routine changes the routine this task is a run of, or the one named in `routine` - this one did not come from a routine (save_routine keeps a new one)')
     if origin.of_task(store, tid)[0] == 'stranger': return {}, 'a routine is not changed from work a stranger started'
+    # ...ITS NAME CHANGES ONLY WHERE A NEW ONE IS ASKED FOR (walk 26, 2026-11-27: asked to make a routine's posts punchier, the agent headed
+    # its ask `title: "Make Social posts punchier"` - what propose's other acts call the thing they make - and his press renamed "Social posts"
+    # to it): the routine is named by `routine`, its new name by `rename`, and an ask's `title` is no field of this card
+    p = {**p, 'title': p.get('rename')}
     cfg = cfg_of(src)
     if not is_workflow(src): return setup_change(src, cfg, p)             # ...a report or a dashboard: its own fields, the same one card and save
     was, new = flow.steps_of(cfg), p.get('flow')
@@ -424,7 +428,7 @@ def change_of(store, tid: int, p: dict) -> tuple:
         agent = [i for i, x in enumerate(new) if isinstance(x, dict) and x.get('kind') == 'agent']
         if len(agent) != 1: return {}, 'this routine has no one agent step to use a skill - send `flow`, its steps whole, the skill on the step that uses it'
         new = [{**x, 'skill': uses} if i == agent[0] else x for i, x in enumerate(new)]
-    if not isinstance(new, list) or not new: return {}, "change_routine needs `prompt` (its agent step's new instructions), `flow` (its steps whole), or a schedule (daily_at, cron, every_minutes) or title"
+    if not isinstance(new, list) or not new: return {}, "change_routine needs `prompt` (its agent step's new instructions), `flow` (its steps whole), a schedule (daily_at, cron, every_minutes) or `rename` (its new name)"
     ok, why = flow.validate(store, new)
     if not ok: return {}, f'the changed steps do not hold: {why}'
     # ...and a script step it adds or repoints carries its script whole: a file's words are on no card, and could change after the press
@@ -478,8 +482,14 @@ def lookup(store, name: str = '') -> str:
     src = named_setup(store, name)
     if not src: return f'No routine or report is called {name!r} - ask with no name for the list.'
     cfg = cfg_of(src)
+    # ...AND THE SKILL IT USES IS SAID AS WHAT IT IS (walk 26, 2026-11-27: "SKILL: social-posts" over 117 characters of instructions, and an
+    # agent asked to change how the routine writes rewrote the instructions, repeating the skill's own limits in them): a page of its own,
+    # read on every run beside these instructions, and how long it is - a fact of the routine, as its clock is
+    def uses(v):
+        n = len(skill_text(cfg, v))
+        return f'{v} - a skill of his, a page of its own ({n:,} characters, read by the skills tool) that every run reads beside the instructions below' if n else v
     head = [f"{kind(src).upper()}: {cfg.get('title') or src.get('Address')} (#{src['SourceId']}){'' if src.get('Active', 1) else ' - switched off'}",
-            *(f'{k.upper()}: {v or "none"}' for k, v in facts(store, src).items() if v or k != 'Done when')]
+            *(f'{k.upper()}: {uses(v) if k == "Skill" and v else v or "none"}' for k, v in facts(store, src).items() if v or k != 'Done when')]
     if not is_workflow(src):
         q = str(cfg.get('prompt') or cfg.get('ai_prompt') or '').strip()
         return '\n'.join([*head, *([f'QUESTION ({len(q):,} characters):\n{q}'] if q else []), *([f"QUERY:\n{cfg['query']}"] if cfg.get('query') else [])])
@@ -555,7 +565,7 @@ def setup_change(src, cfg: dict, p: dict) -> tuple:
     patch = {**{k: v for k, v in want.items() if k in SETUP_KEYS and v != cfg.get(k)}, **clock}
     rows = [{'label': SETUP_KEYS[k], 'was': cfg.get(k) or '', 'now': v} for k, v in patch.items() if k in SETUP_KEYS and k not in TEXTS]
     if clock and runs_words({**cfg, **clock}) != runs_words(cfg): rows.insert(0, {'label': 'Runs', 'was': runs_words(cfg), 'now': runs_words({**cfg, **clock})})
-    if not rows and not set(patch) & set(TEXTS): return {}, 'that is the setup as it already is - give its new question (prompt), schedule (daily_at, cron, every_minutes) or title'
+    if not rows and not set(patch) & set(TEXTS): return {}, 'that is the setup as it already is - give its new question (prompt), schedule (daily_at, cron, every_minutes) or `rename` (its new name)'
     kind = 'dashboard' if cfg.get('type') == 'dashboard' else 'report'
     return change_card({'action': 'change_setup', 'source_id': src['SourceId'], 'kind': kind, 'title': cfg.get('title') or src.get('Address') or '',
             'patch': patch, 'was': {k: cfg.get(k) for k in patch}, 'rows': rows, 'why': ' '.join(str(p.get('why') or '').split())[:300]}), ''

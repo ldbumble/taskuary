@@ -310,7 +310,7 @@ TOOLS = {
                            "every_minutes? - none: on demand} (a script you wrote for a job that will come again, kept as a routine), change_routine "
                            "{routine?: the title of the routine, report or dashboard to change (none: the routine this task is a run of), "
                            "prompt?: its instructions or question whole, or flow?: a routine's steps whole, goal?, done_when?, skill?: the "
-                           "skill of his it uses, browser?: true | false, daily_at | cron | every_minutes?, title?} (one of Taskuary's own "
+                           "skill of his it uses, browser?: true | false, daily_at | cron | every_minutes?, rename?: its new name} (one of Taskuary's own "
                            "setups changed: a routine holds what to do, when, with which connections, and the skill it uses - the routines "
                            "tool reads one as it is saved; the card shows each field that changes and the routine as the press leaves it).\n"
                            "`attach`: files that go with it. `why`: one line on why. `replaces`: the review id (or recipient) of an unsent "

@@ -3322,8 +3322,7 @@ def resume_asking(actor: str = 'startup') -> list:
                 if not row: raise RuntimeError(why)
                 sid = _reopen(tid, row, actor=actor, quiet=True)['sid']
             # a coding pane is answered in words: its chooser did not survive the restart, so its options ride the question
-            for q in qs: ws.record(store, tid, sid, 'input_needed', request_id=q['request_id'], source=ws.RESUMED, choices=q['choices'] if is_gen else None,
-                                   text=q['text'] if is_gen or not q['choices'] else f"{q['text']} ({' / '.join(q['choices'])})")
+            ws.carry(store, tid, qs, sid, ws.RESUMED, words=not is_gen)
             store.add_comment(tid, actor, 'agent', RESTARTED)
             store.audit('task', tid, 'resume-asking', actor, 'system', detail={'sid': sid, 'fromSid': last['Sid'], 'questions': [q['request_id'] for q in qs]})
             out.append(tid)
@@ -3364,6 +3363,8 @@ def _take_ai(task_id: int, pick: str, model: str | None) -> str | None:
     if not task: raise HTTPException(404, 'task not found')
     coding = str(task.get('Kind') or '').lower() in hub_agents.CODING_KINDS
     o = _ready_ai(pick, coding)
+    from . import workerstate as ws
+    asked = [r for r in ws.status(store, task_id)['requests'] if ws.own_question(r)]     # ...its question goes on with the work (ws.carry)
     if (s := general.session_for(task_id)):
         if s.busy and general.stop_turn(store, task_id):
             end = time.time() + 5
@@ -3379,7 +3380,7 @@ def _take_ai(task_id: int, pick: str, model: str | None) -> str | None:
         try: general.place_coding(store, task_id)
         except ValueError as e: raise HTTPException(422, str(e))
     if not brain:
-        try: general.start_session(store, task_id, model=model or None, pick=pick, actor=ACTOR)
+        try: ws.carry(store, task_id, asked, general.start_session(store, task_id, model=model or None, pick=pick, actor=ACTOR).sid)
         except (ValueError, RuntimeError) as e: raise HTTPException(422, str(e))
     return brain
 

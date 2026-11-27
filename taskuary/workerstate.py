@@ -334,6 +334,16 @@ def own_question(r: dict) -> bool:
     return r.get('kind') == 'input_needed' and bool(r.get('text')) and (r.get('source') in ('screen', 'api', RESUMED) or bool(group_of(r.get('request_id'))))
 
 
+# ...AND A QUESTION GOES ON WITH THE WORK WHEN ANOTHER RUN TAKES IT (a restart reopened it, server.resume_asking; his switch of the task's AI
+# started a new one, server._take_ai): asked again on the new run as it was - his to answer still, and read by the new agent as its own
+def carry(store, tid: int, qs: list, sid: str, source: str = None, words: bool = False) -> None:
+    """Record each question `qs` (open requests of an earlier run) on run `sid`: `source` marks them (RESUMED: brought back once), else as they
+    were; `words` folds a chooser's options into its text (a coding pane answered in words)."""
+    for q in qs:
+        record(store, tid, sid, 'input_needed', request_id=q['request_id'], source=source or q.get('source') or 'api', choices=None if words else q['choices'],
+               text=f"{q['text']} ({' / '.join(q['choices'])})" if words and q['choices'] else q['text'])
+
+
 # HIS LINE TYPED UNDER A QUESTION ANSWERS IT (walk 10, 2026-11-23): an API agent's ask_owner stands while its turn goes on, and the line he
 # typed under "Answer the agent's question..." went into that turn - the agent used it, and every later turn was still told "YOUR QUESTION
 # STILL WAITING FOR THE OWNER" over the box still asking. Its own questions (never a sign-in or a step on the page, which only his press or

@@ -158,6 +158,28 @@ class OneRoadTests(unittest.TestCase):
         self.assertTrue(new.send_prompt.call_args.args[0].endswith(continuity.RESUME_PROMPT), 'the new AI picks the work up from the saved conversation')
         self.assertIn('You handed this to Codex CLI (gpt-6.2).', [m['content'][0]['text'] for m in general.press_lines(s, tid)])
 
+    def test_a_question_standing_when_he_switches_the_model_stands_on_the_new_run(self):
+        """His model switch closed the run that asked and started a new one: the question was the old run's, so it fell off his chat and the
+        new agent was never told it stood. It is carried onto the new run - his to answer still, and said to the agent as a fact."""
+        from taskuary import cardqueue, general, taskstate, terminal, workerstate as ws
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Plan the offsite', 'Kind': 'general', 'Status': 'in_progress'}, 'o')
+        old, new = mock.Mock(alive=True, busy=False, sid='old', task_id=tid), mock.Mock(alive=True, busy=False, sid='new', task_id=tid)
+        for n, q in enumerate(('Which city?', 'How many nights?')):
+            ws.record(s, tid, 'old', 'input_needed', request_id=f'q:0123456789:{n}', text=q, choices=['Lisbon', 'Porto'] if not n else None)
+        ready = [{'pick': 'cli:claude', 'label': 'Claude Code'}, {'pick': 'cli:codex', 'label': 'Codex CLI'}]
+        def start(*a, **k): terminal.SESSIONS['new'] = new; return new
+        with mock.patch.object(server, 'store', s), mock.patch('taskuary.general.handles', return_value=True), \
+             mock.patch('taskuary.general.provider_options', return_value=['x']), mock.patch('taskuary.general.brain_options', return_value=ready), \
+             mock.patch('taskuary.general.session_for', side_effect=[old, new, new, new, new]), mock.patch.object(terminal, 'close'), \
+             mock.patch('taskuary.general.start_session', side_effect=start), mock.patch.dict(terminal.SESSIONS, {}), \
+             mock.patch('threading.Thread', side_effect=lambda target, **k: mock.Mock(start=target)):
+            TestClient(server.app).post(f'/api/tasks/{tid}/continue-work', json={'pick': 'cli:codex'})
+            q = taskstate.open_question(s, tid)
+            self.assertTrue(q, 'the question still stands'); self.assertEqual(str(q['sid']), 'new')
+            self.assertEqual(q['questions'], ['Which city?', 'How many nights?']); self.assertEqual(q['choices'], ['Lisbon', 'Porto'])
+            self.assertIn('Your question, waiting for his answer', cardqueue.screen(s, tid), 'the new agent is told it stands')
+
     def test_a_coding_task_handed_to_another_cli_starts_it_fresh_with_the_handover(self):
         from taskuary import agents, general
         s = MemoryStore()

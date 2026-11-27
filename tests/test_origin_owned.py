@@ -7,7 +7,7 @@ import json
 from unittest import mock
 from taskuary import origin, reports, learning, memory
 from taskuary.store import MemoryStore
-from test_origin_ideas import _store, _mail, _report, _idea, _task
+from test_origin_ideas import _store, _mail, _report, _idea, _task, _triaged
 
 
 def _run(s, cfg, sid=None, llm=None):
@@ -111,3 +111,35 @@ def test_a_memory_line_with_no_record_is_a_stranger_s():
     o, why = origin.memory_rests_on(s, key)
     assert o == 'stranger' and 'no record' in why
     assert _cites_memory(s, key)[0] == 'stranger' and _cites_memory(s, 'not-a-line')[0] == 'stranger'
+
+
+# A MONITOR ON HIS OWN DATABASE (live, 2026-11-27: "it says no trust on own system"): a monitor report (type 'assistant') read only his own
+# connected SQL server, the Advisor raised "a run failed to save" from it, and the task ran with no mail, memory or history - its idea cites
+# no message, only the monitor its key names (report:<id>:idea:...), and that monitor's sources were never read
+RUNS = {'type': 'mssql', 'label': 'Northwind runs', 'query': 'select 1', 'max_rows': 50}
+
+def _monitor(s, *watch, **cfg):
+    return s.save_source({'Channel': 'report', 'Address': 'Run checks', 'Active': 1,
+                          'ConfigJson': json.dumps({'type': 'assistant', 'title': 'Run checks', 'watch_sources': list(watch), **cfg})}, 't')
+
+def _monitor_idea(s, sid, slug='save-failure'):
+    return s.upsert_idea({'key': f'report:{sid}:idea:{slug}', 'kind': 'idea', 'text': 'A run failed to save its results for record 12',
+                          'sig': f'{sid}{slug}', 'action': {'type': 'note', 'why': 'the run log shows a failed save'}}, '2026-11-27 08:00:00')
+
+def test_an_idea_from_a_monitor_on_his_own_connected_database_is_trusted_on_either_road():
+    s = _store(); i = _monitor_idea(s, _monitor(s, RUNS))
+    for t in (_task(s, i), _triaged(s, i)):
+        o, why = origin.of_task(s, t)
+        assert o == 'trusted', why
+        assert origin.no_history_line(s, t) == ''
+
+def test_a_monitor_reading_a_feed_his_mail_or_an_outside_saved_report_stays_a_stranger_s():
+    s = _store()
+    o, why = origin.of_task(s, _task(s, _monitor_idea(s, _monitor(s, RUNS, NEWS))))
+    assert o == 'stranger' and 'Industry news' in why
+    o, why = origin.of_task(s, _task(s, _monitor_idea(s, _monitor(s, RUNS, blocks={'threads': {'on': True}}))))
+    assert o == 'stranger' and 'mail' in why, why                              # a ticked Taskuary block reads everyone's mail
+    news = s.save_source({'Channel': 'report', 'Address': 'News', 'Active': 1, 'ConfigJson': json.dumps({**NEWS, 'title': 'News'})}, 't')
+    assert origin.of_task(s, _task(s, _monitor_idea(s, _monitor(s, RUNS, watch_source_ids=[news]))))[0] == 'stranger'
+    assert origin.of_task(s, _task(s, _monitor_idea(s, _monitor(s, {**RUNS, 'own_system': False}))))[0] == 'stranger'   # his switch, off
+    assert origin.of_task(s, _task(s, _monitor_idea(s, 999)))[0] == 'stranger'                                          # a monitor gone

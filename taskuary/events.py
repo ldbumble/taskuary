@@ -256,7 +256,10 @@ def card(store, r: dict) -> None:
                 back=bool(olds) and r.get('Status') == 'pending' and not r.get('DeliveryState') and not err, **_went(r),
                 **({'until': proposals.UNTIL} if proposals.comes_back(store, r) else {}))
     if olds and _card(olds[-1]) == _card(body): return
-    add(store, tid, 'card', f'card:{rid}:{len(olds)}:{_card(body)[:200]}', **body, own=general.at_work(tid))
+    # ...ITS OWN CALL'S, where a turn at work wrote it - NEVER WHAT AN INPUT GREYED (walk 25, 2026-11-26: his press marks the task at work before
+    # his line is heard, so the greying that line did was filed as the turn's own and never said - it answered "waiting for your Send" over a
+    # greyed card): that is the input's doing, told to the turn the input begins
+    add(store, tid, 'card', f'card:{rid}:{len(olds)}:{_card(body)[:200]}', **body, own=general.at_work(tid) and not (r.get('Status') == 'superseded' and r.get('DecideNote') == proposals.SET_ASIDE))
 
 
 def _went(r: dict) -> dict:

@@ -31,7 +31,7 @@ export default function TurnFiles({ files }) { return fileGroups(files).map((g) 
 function Group({ files }) {
   const [viewing, setViewing] = useState(null), [pick, setPick] = useState(null), [err, save, saved] = useSave();
   const one = files.length === 1, f = files.find((x) => x.path === pick) || files[0];
-  const items = one ? [] : files.map((x) => ({ id: x.path, target: x.name, line: [fileKind(x), sizeWords(x.size)].filter(Boolean).join(" · "),
+  const items = one ? [] : files.map((x) => ({ id: x.path, target: x.title || x.name, line: [fileKind(x), sizeWords(x.size)].filter(Boolean).join(" · "),
     picked: x === f, onPick: () => setPick(x.path), tail: <Download f={x} save={save} sx={{ minWidth: 0 }} /> }));
   return (
     <div className="tq-published" data-tq-turn-files="">
@@ -39,7 +39,7 @@ function Group({ files }) {
         ? <Artifact className="tq-published-page" data-tq-turn-file={f.path} style={mediaFit(f)?.box}>
             <div className="tq-published-row">
               <button type="button" className="tq-published-name" onClick={() => setViewing(f)} title="Open it here">
-                <b>{f.name}</b><span>{isPic(f) ? "picture" : f.preview || "file"} · open</span></button>
+                <b>{f.title || f.name}</b><span>{isPic(f) ? "picture" : f.preview || "file"} · open</span></button>
               {isText(f) && <CopyFile f={f} />}
               <Download f={f} save={save} />
             </div>

@@ -115,7 +115,7 @@ TOOLS = {
                      "`id` is drawn once, where you just showed it, as it now is - no older copy stays above it. "
                      "Types: grid, stats, chart, table, checklist, list, steps, text, note, badge, button, slider, toggle, select, date, "
                      "choice, availability - their props and worked examples are the guide tool's `show` topic. A view never sends, pays or closes. "
-                     "A bad spec comes back saying what to fix. `files`: full paths of files you made - a picture,"
+                     "A bad spec comes back saying what to fix. `files`: files you made, each its full path or {path, title} - a picture,"
                      " a PDF, a page, or any file that is text - each is copied onto the task and drawn in this "
                      "chat as it is, a picture as the picture; several in one call (versions of one thing) stand as one artifact, "
                      f"separate calls as separate ones. {SHOW_WHAT} It is the one road onto the owner's screen: a viewer, a browser or an app opened on the computer is not"
@@ -1113,8 +1113,10 @@ def show_files(store, tid: int, paths) -> str:
     from . import outputs, session_artifacts
     from .general import file_name
     if isinstance(paths, str): paths = [paths]
-    roots, rows, why, drawn, reads, gave = _show_roots(), [], [], [], [], []
+    roots, rows, why, drawn, reads, gave, named = _show_roots(), [], [], [], [], [], {}
     for raw in list(paths or [])[:12]:
+        # ...EACH FILE MAY CARRY ITS OWN TITLE (walk 26, 2026-11-27: a call per file, to title each, made three artifacts of one hand-over)
+        raw, title = (raw.get('path') or '', ' '.join(str(raw.get('title') or '').split())[:120]) if isinstance(raw, dict) else (raw, '')
         # ...A PATH WITHOUT ITS ROOT IS THE TASK'S OWN (walk 9, 2026-11-23: "outputs/TQ-0014/sample-invoice.pdf" and a bare file name were
         # refused as outside the outputs folder they were in, and the agent's end_turn said it showed them): read against its outputs folder,
         # then the scratch folder the agent works in - never the server's own working folder
@@ -1131,7 +1133,9 @@ def show_files(store, tid: int, paths) -> str:
         # "212" in it went to the board after "update everything")
         reads.append(p)
         # ...and one of its task's folder is HANDED OVER: drawn in its turn as the file of the folder (this call's, one artifact), never also as a copy
-        if p.is_relative_to(outputs.folder(tid).resolve()): gave.append(p)
+        if p.is_relative_to(outputs.folder(tid).resolve()):
+            gave.append(p)
+            if title: named[p] = title
         # ...A WORKBOOK OR A DOCUMENT IN THE TASK'S OWN OUTPUTS FOLDER IS ALREADY IN FRONT OF HIM (the walks, 2026-11-21: show answered ".xlsx
         # cannot be shown" while the chat drew the sheet, and the agent told him it could not be previewed): the page previews what it makes there
         # under the turn that made it (outputs.preview_of) - said so, never refused
@@ -1141,9 +1145,9 @@ def show_files(store, tid: int, paths) -> str:
             else: why.append(f'{n}: {e}')
             continue
         except OSError as e: why.append(f'{n}: {e}'); continue
-        rows.append({'id': a['ArtifactId'], 'name': a.get('Name') or p.name, 'path': f"shown:{a['ArtifactId']}", 'kind': 'shown',
+        rows.append({'id': a['ArtifactId'], 'name': a.get('Name') or p.name, **({'title': title} if title else {}), 'path': f"shown:{a['ArtifactId']}", 'kind': 'shown',
                      'content_type': a.get('ContentType') or '', 'size': a.get('Size') or 0, 'url': f"/api/task-artifacts/{a['ArtifactId']}"})
-    outputs.hand(tid, gave)             # ...this call's files together: one hand-over, one artifact
+    outputs.hand(tid, gave, named)      # ...this call's files together: one hand-over, one artifact
     from . import attachtext
     say = attachtext.block(attachtext.of_paths(reads), SHOWN_SAY, file_cap=SHOWN_CHARS)
     if not rows and not drawn and not say: raise ValueError('nothing was shown - ' + '; '.join(why))

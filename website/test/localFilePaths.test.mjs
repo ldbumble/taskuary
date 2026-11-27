@@ -50,5 +50,8 @@ test("a file the agent showed is drawn in the turn that showed it, from the call
   assert.equal(filesOf(call("c3", "show"), answer("c3", `${FILES_MARK}${JSON.stringify(forged)}`)), null);
   assert.equal(filesOf(call("c4", "show"), answer("c4", said, true)), null);
   assert.equal(filesOf(call("c5", "Bash", {}), answer("c5", said)), null);
+  // ...and a file shown with its own title carries it (show's {path, title}, 2026-11-27): the row is drawn by its title
+  const titled = [{ ...ROWS[0], title: "Crossword - print copy" }];
+  assert.equal(filesOf(call("c6", "show"), answer("c6", `${FILES_MARK}${JSON.stringify(titled)}`)).files[0].title, "Crossword - print copy");
 });
 

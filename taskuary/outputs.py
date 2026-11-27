@@ -304,18 +304,26 @@ def turn_folder(tid: int, turn: int) -> Path: return turns_folder(tid) / str(int
 # not a bunch of artifacts"): a script's charts and a drafts file were drawn in the chat beside the cards that carried them, as every file a
 # turn wrote was. A file of the folder is drawn in its turn only once `show` hands it over - several at once one artifact; the rest stay in
 # the task's files
-def hand(tid: int, paths) -> None:
+def hand(tid: int, paths, named: dict = None) -> None:
     """Mark these files of task `tid`'s folder (paths in it, or under it) as handed over to the owner, in the order they were handed - ONE CALL,
     ONE HAND-OVER (the card gallery, 2026-11-25: a chart and its workbook, each shown by a call of its own, stood as one artifact "2 files"):
-    what one call hands is one group (calls), and a file handed before keeps the place it has."""
+    what one call hands is one group (calls), and a file handed before keeps the place it has. `named`: {path: the title its agent gave it}."""
     got, new = calls(tid), []
     for p in paths:
         try: r = rel(tid, Path(p))
         except (OSError, ValueError): continue
         if r not in new and not any(r in g for g in got): new.append(r)
+    if named and (ts := {rel(tid, Path(p)): t for p, t in named.items()}):
+        turns_folder(tid).mkdir(parents=True, exist_ok=True)
+        (turns_folder(tid) / 'titles.json').write_text(json.dumps({**titles(tid), **ts}), encoding='utf-8')
     if not new: return
     turns_folder(tid).mkdir(parents=True, exist_ok=True)
     (turns_folder(tid) / 'handed.json').write_text(json.dumps(got + [new]), encoding='utf-8')
+def titles(tid: int) -> dict:
+    "{path: title} - the titles its agent gave the files it handed over (show's {path, title}); a file with none is drawn by its name."
+    try: got = json.loads((turns_folder(tid) / 'titles.json').read_text(encoding='utf-8'))
+    except (OSError, ValueError): return {}
+    return got if isinstance(got, dict) else {}
 def calls(tid: int) -> list:
     "What each `show` call handed over, a list of paths per call, in order. A list kept before calls were (bare paths) is one hand-over."
     try: got = list(json.loads((turns_folder(tid) / 'handed.json').read_text(encoding='utf-8')))

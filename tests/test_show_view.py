@@ -532,6 +532,24 @@ def test_files_handed_over_stand_in_the_order_they_were_handed():
     finally: shutil.rmtree(out, ignore_errors=True); shutil.rmtree(outputs.turns_folder(tid), ignore_errors=True)
 
 
+def test_a_file_shown_can_carry_its_own_title_and_the_call_stays_one_artifact():
+    """The design audit, 2026-11-27 (walk 26): to give each file a title ("Crossword - print PDF", "Answer key") Codex made one `show` call per
+    file - three artifacts where one hand-over was meant. A file is a path or {path, title}: one call, one artifact, each row titled."""
+    import shutil
+    from taskuary import outputs
+    s = MemoryStore(); tid = s.create_task({'Title': 'A crossword and its key', 'Kind': 'general'}, 'owner')
+    out = outputs.folder(tid)
+    for d in (out, outputs.turns_folder(tid)): shutil.rmtree(d, ignore_errors=True)
+    out.mkdir(parents=True, exist_ok=True)
+    for n in ('grid.md', 'key.md'): (out / n).write_text(f'# {n}\n', encoding='utf-8')
+    try:
+        said = agenttools.show_files(s, tid, [{'path': str(out / 'grid.md'), 'title': 'Crossword - print copy'}, str(out / 'key.md')])
+        assert outputs.calls(tid) == [['grid.md', 'key.md']], 'one call, one hand-over'
+        assert outputs.titles(tid) == {'grid.md': 'Crossword - print copy'}, outputs.titles(tid)
+        assert 'grid.md' in said and 'key.md' in said
+    finally: shutil.rmtree(out, ignore_errors=True); shutil.rmtree(outputs.turns_folder(tid), ignore_errors=True)
+
+
 def test_each_show_call_is_a_hand_over_of_its_own():
     """The card gallery, 2026-11-25: a chart and its workbook, each shown by a call of its own in one turn, stood as one artifact "2 files".
     One call is one hand-over: the files of a call share its number, the next call's have the next, and the page draws each as its own."""

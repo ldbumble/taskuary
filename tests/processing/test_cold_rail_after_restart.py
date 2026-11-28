@@ -258,3 +258,149 @@ def test_a_waiting_letter_asks_the_wall_without_reading_its_thread(restarted, mo
     reads.clear()
     assert outbound.no_from(s, rv) is None
     assert not [q for q in reads if re.search(r'FROM message\b', q)], 'the letter read its thread to say it has a mailbox'
+
+
+# ── A KEPT HOLD STANDS UNTIL WHAT IT WAS JUDGED ON MOVES (2026-11-27) ─────────────────────────────────────────────────────────────────────
+# About one rail build in five ran ~45k statements where the rest ran ~7-20k: every open task's Trust hold was judged again, because change_gen
+# 'trust' had moved since the last full build - and it moved on writes no trust rule reads (a mail's rank, a brief, a draft rewritten, an idea
+# reworded, an agent started, every mail poll's checkpoint on its connector). Judging is unchanged; what moves the generation is now only
+# what a rule reads, and the answer kept is the answer judged afresh - for a closed task too, which was judged afresh on every read.
+def _settled(s):
+    "The home as a running app leaves it: the rail built, and every kept hold judged until judging lifts nothing more."
+    from taskuary import origin
+    server._pile_payload(force=True, fyi=50)
+    for _ in range(10):
+        was = _gen(s)
+        for t in s._rows('SELECT TaskId FROM task'): origin._now_judged(s, t['TaskId'])
+        if _gen(s) == was: return
+    raise AssertionError('judging never settled')
+
+
+def _gen(s): return s._one("SELECT Gen FROM change_gen WHERE Tbl='trust'")['Gen']
+
+
+def _unread_writes(s, tids):
+    "One of each write no trust rule reads: (what, write)."
+    import json
+    t = next(t for t in tids if s.get_task(t)['Status'] == 'open')
+    mid = s._one('SELECT MessageId FROM message WHERE TaskId IS NULL')['MessageId']
+    rv = s._one("SELECT ReviewId FROM review WHERE Status='pending'")['ReviewId']
+    idea = s._one('SELECT IdeaId FROM idea')['IdeaId']
+    cid = s._one('SELECT MIN(ConnectorId) c FROM connector')['c']
+    return [('a mail ranked', lambda: s._exec('UPDATE message SET RankValue=?, RankWhy=? WHERE MessageId=?', (0.9, 'first', mid))),
+            ('a brief written', lambda: s.set_brief(mid, 'a brief')),
+            ("triage's title and a meeting card", lambda: s._exec('UPDATE message SET TriageTitle=?, MeetJson=? WHERE MessageId=?', ('t', '{}', mid))),
+            ('a draft rewritten', lambda: s._exec('UPDATE review SET DraftText=?, DraftAt=?, Stale=1 WHERE ReviewId=?', ('again', '2026-11-27', rv))),
+            ('an idea reworded', lambda: s._exec('UPDATE idea SET Text=?, LastSaid=?, SaidCount=3 WHERE IdeaId=?', ('reworded', '2026-11-27', idea))),
+            ('an agent started', lambda: s._exec("UPDATE task SET Status='in_progress' WHERE TaskId=?", (t,))),
+            ("a mail poll's checkpoint", lambda: s.patch_connector_poll_state(cid, config_set={'last_uid': 42, 'account_signature': {'x': json.dumps({})}}))]
+
+
+def _read_writes(s, tids):
+    "One write to each thing a trust rule reads: (what, write)."
+    import json
+    t = next(t for t in tids if s.get_task(t)['Status'] == 'open')
+    mid = s._one('SELECT MessageId FROM message WHERE TaskId IS NOT NULL')['MessageId']
+    rv = s._one('SELECT ReviewId FROM review')['ReviewId']
+    idea = s._one('SELECT IdeaId FROM idea')['IdeaId']
+    cid = s._one('SELECT MIN(ConnectorId) c FROM connector')['c']
+    return [('a new mail', lambda: s.add_message({'Status': 'filed', 'Channel': 'email', 'ExternalId': 'trust-new', 'FromName': 'Erin Blake',
+                                                  'FromEmail': 'erin@vendor.example', 'BodyText': 'x', 'ConversationId': 'trust-new', 'Direction': 'in'})),
+            ("a mail's status", lambda: s._exec("UPDATE message SET Status='context' WHERE MessageId=?", (mid,))),
+            ("a mail's danger", lambda: s._exec("UPDATE message SET Danger='x', DangerAim='agent' WHERE MessageId=?", (mid,))),
+            ('a reply sent', lambda: s._exec("UPDATE review SET Status='sent' WHERE ReviewId=?", (rv,))),
+            ('what an idea cites', lambda: s._exec('UPDATE idea SET ActionJson=? WHERE IdeaId=?', (json.dumps({'mid': mid}), idea))),
+            ('his Trust', lambda: s.remember_trust('alex@northwind.example', 'p1@vendor.example', 'you vouched for them')),
+            ('what he vouched for', lambda: s._exec('UPDATE task SET TrustedThrough=? WHERE TaskId=?', (mid, t))),
+            ('a source switched off', lambda: s._exec('UPDATE source SET Active=0 WHERE SourceId=(SELECT MIN(SourceId) FROM source)')),
+            ("a connection's settings", lambda: s._exec("UPDATE connector SET ConfigJson=? WHERE ConnectorId=?", (json.dumps({'address': 'alex@northwind.example'}), cid))),
+            ('a profile', lambda: s._exec("UPDATE connector SET Scope='work' WHERE ConnectorId=?", (cid,)))]
+
+
+def test_only_a_write_a_trust_rule_reads_moves_who_is_trusted(restarted):
+    s, tids = restarted
+    _two_profiles(s)
+    for what, write in _unread_writes(s, tids):
+        was = _gen(s); write()
+        assert _gen(s) == was, f'{what} moved who is trusted'
+    for what, write in _read_writes(s, tids):
+        was = _gen(s); write()
+        assert _gen(s) > was, f'{what} left every kept hold standing'
+    # ...and a message is read whole: every column of it but the five Taskuary writes for the rail counts, one added later too
+    mid = s._one('SELECT MessageId FROM message WHERE TaskId IS NOT NULL')['MessageId']
+    for col in [r[1] for r in s.cx.execute('PRAGMA table_info(message)')]:
+        if col in ('MessageId', 'Brief', 'TriageTitle', 'MeetJson', 'RankValue', 'RankWhy'): continue
+        was = _gen(s); s._exec(f"UPDATE message SET {col}=COALESCE({col}, '') || '' WHERE MessageId=?", (mid,))
+        s._exec(f'UPDATE message SET {col}=? WHERE MessageId=?', ('9' if col in ('TaskId', 'RankValue') else 'moved', mid))
+        assert _gen(s) > was, f"a message's {col} moved nobody's trust"
+
+
+def test_every_kept_verdict_is_the_verdict_judged_afresh(restarted):
+    """The stored road answers exactly what judging afresh answers - open and closed tasks alike, before and after every write no rule reads -
+    and so does every surface that asks it (hold, withheld, quiet, keeps_him, of_task)."""
+    from taskuary import origin
+    s, tids = restarted
+    _two_profiles(s)
+    _settled(s)
+    every = [r['TaskId'] for r in s._rows('SELECT TaskId FROM task')]
+    def fresh(t):
+        row = s.get_task(t)
+        h = origin._hold(s, t, row)
+        return {'hold': h, 'quiet': origin._quiet(s, t, row), 'own': origin.his_own(s, t) if h else None}
+    def kept(t):
+        j = origin._judged(s, t, closed=True)
+        return {'hold': j['hold'], 'quiet': j['quiet'], 'own': j['own']}
+    def surfaces(t):
+        return (origin.hold(s, t), sorted(origin.withheld(s, t)), sorted(origin.quiet(s, t)), origin.keeps_him(s, t), origin.of_task(s, t))
+    for round_, writes in (('settled', []), ('after writes no rule reads', _unread_writes(s, tids))):
+        for _, write in writes: write()
+        server._pile_payload(force=True, fyi=50)
+        stored, shown = {t: kept(t) for t in every}, {t: surfaces(t) for t in every}
+        assert any(v['hold'] for v in stored.values()) and any(s.get_task(t)['Status'] in ('done', 'dropped') and v['hold'] for t, v in stored.items())
+        s._exec('DELETE FROM origin_hold')
+        assert {t: fresh(t) for t in every} == stored, f'{round_}: a kept verdict is not what judging afresh says'
+        assert {t: surfaces(t) for t in every} == shown, f'{round_}: a surface reads otherwise with nothing kept'
+
+
+def test_a_closed_task_s_hold_is_judged_once(restarted, monkeypatch):
+    """A closed task's chat asks what is withheld from its agent on every read: it was judged afresh each time (~150 statements). It is kept
+    like an open task's, and judged again when its thread moves."""
+    from taskuary import origin
+    s, tids = restarted
+    _two_profiles(s)
+    _settled(s)
+    t = next(t for t in tids if s.get_task(t)['Status'] == 'done' and origin.withheld(s, t))
+    s._exec('DELETE FROM origin_hold WHERE TaskId=?', (t,))
+    reads = _traced(s, monkeypatch)
+    first = origin.withheld(s, t); judged = len(reads); reads.clear()
+    assert origin.withheld(s, t) == first and len(reads) <= 5, f'a closed task read its hold again in {len(reads)} statements'
+    assert judged > 20 * len(reads), 'the first read judged nothing'
+    s.add_message({'TaskId': t, 'Status': 'routed', 'Channel': 'email', 'ExternalId': 'closed-again', 'FromName': 'Erin Blake',
+                   'FromEmail': 'erin@vendor.example', 'BodyText': 'one more', 'ConversationId': 'closed-again', 'Direction': 'in'})
+    reads.clear(); again = origin.withheld(s, t)
+    assert len(reads) > 20 and len(again) == len(first) + 1, 'a new mail on the closed task was not judged'
+
+
+# ...a full rail build (a connection's card written) after writes no rule reads: judged on 0.4.6.13 every open task's hold again
+FULL_AFTER_UNREAD = 30_000
+
+
+def test_a_full_rail_build_after_writes_no_rule_reads_judges_no_hold_again(restarted, monkeypatch):
+    from taskuary import origin
+    s, tids = restarted
+    _two_profiles(s)
+    _settled(s)
+    judged, hold = [], origin._hold
+    monkeypatch.setattr(origin, '_hold', lambda *a: judged.append(a[1]) or hold(*a))
+    counts = []
+    for what, write in _unread_writes(s, tids):
+        write()
+        s._exec("UPDATE connector SET LastErrorAt=? WHERE ConnectorId=(SELECT MIN(ConnectorId) FROM connector)", (what,))
+        funnel.invalidate()
+        reads = _traced(s, monkeypatch)
+        server._pile_payload(force=True, fyi=50)
+        counts.append((what, len(reads), len(judged)))
+        for cx in (s.cx, s._rail_cx, *s._readers):
+            if cx is not None: cx.set_trace_callback(None)
+    assert not judged, f'holds judged again after {counts}'
+    assert all(n < FULL_AFTER_UNREAD for _, n, _ in counts), counts

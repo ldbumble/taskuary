@@ -889,13 +889,20 @@ PROCESSING_DIRTY_TABLES = (
     'batch_item',                # a batch row's progress line (batch.rail) moves as the agent reports each item
 )
 # WHAT A SENDER'S TRUST IS READ FROM (senders.known, origin.of_message, idea_rests_on): (table, the columns whose update moves it - '' every
-# column, 'blind' every setting a pile never reads stays out). A write to any of them moves change_gen 'trust', and every task's stored hold
-# is judged again on its next read (origin.hold). A table read by the trust rules and missing here serves a stale hold.
+# column, 'blind' every setting a pile never reads stays out, '-' every column BUT the ones named). A write to any of them moves change_gen
+# 'trust', and every task's stored hold is judged again on its next read (origin.hold). A table read by the trust rules and missing here
+# serves a stale hold.
+# ...AND ONLY WHAT THE RULES READ (2026-11-27: a full rail build ran ~45k statements where ~20k did, every open task's hold judged again
+# because a mail was ranked, a brief or a draft rewritten, an idea reworded or an agent started since): a review is read for whether it
+# went (store.wrote_to_locally: its message and status), an idea for what it cites (origin.cites: its key and action), a task for how it
+# began and what he vouched for - never its Status, which no rule reads (a closed task's hold is kept like an open one's). A message is
+# read whole, so every column counts but what Taskuary writes about it afterwards for the rail: its rank, its brief, triage's title and
+# the meeting card it carries. A column added to message later counts until it is named here
 TRUST_INPUTS = (
-    ('message', ''), ('review', ''), ('sender_trust', ''), ('idea', ''), ('memory_line', ''), ('doc', ''), ('agent', ''),
-    ('project_link', ''), ('setting', 'blind'),
+    ('message', '-Brief, TriageTitle, MeetJson, RankValue, RankWhy'), ('review', 'MessageId, Status'), ('sender_trust', ''),
+    ('idea', 'Key, ActionJson'), ('memory_line', ''), ('doc', ''), ('agent', ''), ('project_link', ''), ('setting', 'blind'),
     ('source', 'Channel, Address, Owner, ConnectorId, Active, ConfigJson'), ('connector', 'Type, ConfigJson, Active, Roles, Scope'),
-    ('task', 'OriginBase, TrustedThrough, Source, SourceRef, Status, Kind'),
+    ('task', 'OriginBase, TrustedThrough, Source, SourceRef, Kind'),
 )
 PROCESSING_DIRTY_SETTINGS = (
     'feed_days', 'funnel_hours', 'funnel_mutes', 'owner_email', 'team_domains', 'processing_membership_rules',
@@ -1606,6 +1613,11 @@ class SQLiteStore:
             # ...a setting only where its value moved, and none a pile never reads (a stamp the store rewrites as it opens left every hold stale)
             blind = lambda r: ' AND '.join(f"{r}.Name NOT LIKE '{k}%'" for k in PILE_BLIND_SETTINGS)
             for table, cols in TRUST_INPUTS:
+                if cols.startswith('-'):
+                    but = {c.strip() for c in cols[1:].split(',')}
+                    cols = ', '.join(r[1] for r in self.cx.execute(f'PRAGMA table_info({table})') if r[1] not in but)
+                # ...an update trigger's columns move with this list and with the table's own (an older one kept firing on all of them)
+                self.cx.execute(f'DROP TRIGGER IF EXISTS trust_gen_{table}_update')
                 for action in ('INSERT', 'UPDATE', 'DELETE'):
                     of = f' OF {cols}' if action == 'UPDATE' and cols not in ('', 'blind') else ''
                     row = 'OLD' if action == 'DELETE' else 'NEW'
@@ -2258,8 +2270,13 @@ class SQLiteStore:
                     if table != 'source': raise ValueError('only sources have LastPolledAt')
                     values.append(last_polled_at)
                     assignments.append('LastPolledAt=?')
+                # ...NOR IN WHO IS TRUSTED (2026-11-27): a checkpoint, a cursor or the signature read off Sent mail is no rule's input, but it
+                # lands in ConfigJson, which is (TRUST_INPUTS) - every mail poll moved change_gen 'trust' and the next rail judged every
+                # open task's hold again. The one road for poll metadata keeps the generation where it stood, in the same transaction
+                gen = self.cx.execute("SELECT Gen FROM change_gen WHERE Tbl='trust'").fetchone()
                 self.cx.execute(f"UPDATE {table} SET {','.join(assignments)} WHERE {key}=?",
                                 [*values, row_id])
+                if gen is not None: self.cx.execute("UPDATE change_gen SET Gen=? WHERE Tbl='trust'", (gen[0],))
                 self.cx.commit()
                 self._writes += 1
                 # Watermarks and poll checkpoints do not participate in a processing item.

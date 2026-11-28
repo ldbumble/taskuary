@@ -1585,30 +1585,33 @@ def one_state(store, payload: dict, observed=_OBSERVE) -> dict:
     elif observed is _OBSERVE:
         try: observed = observe()
         except Exception: observed, kept = (), {}                     # unobservable: every state is read afresh
-    for i in rows:
-        tid = i.get('tid') or (int(str(i.get('key'))[6:]) if str(i.get('key') or '').startswith('agent:') and str(i['key'])[6:].isdigit() else None)
-        # ...an agent's own row is read off the live session it shows (observe) - the same facts taskstate reads, already in hand
-        if not tid or i.get('kind') in ('agent', 'idea', 'followup') or i.get('idea'): continue
-        if tid not in seen:
-            sig = _session_sig(observed, int(tid))
-            if (got := kept.get(int(tid))) and got[0] == sig: seen[tid] = dict(got[2]) if got[2] else None
-            else:
-                at, t = time.time(), store.get_task(int(tid))
-                try: seen[tid] = taskstate.status(store, t) if t and t.get('Status') not in ('done', 'dropped') else None
-                except Exception as e: logger.debug(f'funnel: the state of task {tid} was not read - {e}'); seen[tid] = None; at = 0
-                # ...kept only while no write landed since the mark it was read at: one that did may have been missed by it
-                if _kept_at(store) == top: kept[int(tid)] = (sig, at, dict(seen[tid]) if seen[tid] else None)
-        st = seen[tid]
-        # ...AND A CHAT AGENT DONE FOR NOW READS SO ON ITS ROW (the card gallery, 2026-11-25: Enter the bill pressed, nothing owed, and the header
-        # read "on you" off the row's own lane - "agent done" is no lane): the row is the chat's done row, as an idled agent's is (paused_conversation)
-        if st and st['key'] == 'chat_done' and i.get('lane') in ('yours', 'queued') and (t := store.get_task(int(tid))):
-            i.update({k: v for k, v in chat_done(store, t).items() if k in ('kind', 'lane', 'who', 'why', 'chat_done')}, status=st); continue
-        # ...AND A TASK HE ANSWERED WITH NO AGENT ON IT READS SO ON ITS ROW (walk 25, 2026-11-26: "on you" and "asked 3 minutes ago" over the invite
-        # he had accepted): the task's own row under Tasks, as a chat's done row is - no ask stands on it, an urgent one's shade neither
-        if st and st['key'] == 'answered' and i.get('lane') in ('yours', 'asked', 'time'):
-            i.pop('urgent_request', None); i.update(lane='yours', answered=True, why=st.get('hint') or i.get('why') or '', status=st); continue
-        if not st or st['key'] not in LANES or i.get('lane') in OWN_WORDS or (st['key'] == 'yours' and i.get('lane') in ARRIVAL_WORDS): continue
-        i['lane'], i['status'] = st['key'], st
+    # ...each task's state read in one sitting: the settings, the owner and SOUL it asks (a stranger's hold judged again, senders.known) read once
+    # for every row, never once a row - as the rail's own build holds them (processing_unread.build)
+    with (store.held_settings() if hasattr(store, 'held_settings') else contextlib.nullcontext()):
+        for i in rows:
+            tid = i.get('tid') or (int(str(i.get('key'))[6:]) if str(i.get('key') or '').startswith('agent:') and str(i['key'])[6:].isdigit() else None)
+            # ...an agent's own row is read off the live session it shows (observe) - the same facts taskstate reads, already in hand
+            if not tid or i.get('kind') in ('agent', 'idea', 'followup') or i.get('idea'): continue
+            if tid not in seen:
+                sig = _session_sig(observed, int(tid))
+                if (got := kept.get(int(tid))) and got[0] == sig: seen[tid] = dict(got[2]) if got[2] else None
+                else:
+                    at, t = time.time(), store.get_task(int(tid))
+                    try: seen[tid] = taskstate.status(store, t) if t and t.get('Status') not in ('done', 'dropped') else None
+                    except Exception as e: logger.debug(f'funnel: the state of task {tid} was not read - {e}'); seen[tid] = None; at = 0
+                    # ...kept only while no write landed since the mark it was read at: one that did may have been missed by it
+                    if _kept_at(store) == top: kept[int(tid)] = (sig, at, dict(seen[tid]) if seen[tid] else None)
+            st = seen[tid]
+            # ...AND A CHAT AGENT DONE FOR NOW READS SO ON ITS ROW (the card gallery, 2026-11-25: Enter the bill pressed, nothing owed, and the header
+            # read "on you" off the row's own lane - "agent done" is no lane): the row is the chat's done row, as an idled agent's is (paused_conversation)
+            if st and st['key'] == 'chat_done' and i.get('lane') in ('yours', 'queued') and (t := store.get_task(int(tid))):
+                i.update({k: v for k, v in chat_done(store, t).items() if k in ('kind', 'lane', 'who', 'why', 'chat_done')}, status=st); continue
+            # ...AND A TASK HE ANSWERED WITH NO AGENT ON IT READS SO ON ITS ROW (walk 25, 2026-11-26: "on you" and "asked 3 minutes ago" over the invite
+            # he had accepted): the task's own row under Tasks, as a chat's done row is - no ask stands on it, an urgent one's shade neither
+            if st and st['key'] == 'answered' and i.get('lane') in ('yours', 'asked', 'time'):
+                i.pop('urgent_request', None); i.update(lane='yours', answered=True, why=st.get('hint') or i.get('why') or '', status=st); continue
+            if not st or st['key'] not in LANES or i.get('lane') in OWN_WORDS or (st['key'] == 'yours' and i.get('lane') in ARRIVAL_WORDS): continue
+            i['lane'], i['status'] = st['key'], st
     return payload
 
 

@@ -395,15 +395,18 @@ RULES = 7
 _SIG = """SELECT t.Status, t.TrustedThrough, t.OriginBase, t.Tags, (SELECT COUNT(*) FROM message WHERE TaskId=t.TaskId) n,
     (SELECT MAX(MessageId) FROM message WHERE TaskId=t.TaskId) m, (SELECT Gen FROM change_gen WHERE Tbl='trust') g,
     h.Sig, h.HoldJson FROM task t LEFT JOIN origin_hold h ON h.TaskId=t.TaskId WHERE t.TaskId=?"""
-def _judged(store, tid) -> dict | None:
-    "{hold, own (his_own, read only where a hold stands)} for an open task, from origin_hold while it is current, else judged and kept."
-    if not tid or not (r := store._one(_SIG, (int(tid),))) or r['Status'] in ('done', 'dropped'): return None
+def _judged(store, tid, closed: bool = False) -> dict | None:
+    """{hold, own (his_own, read only where a hold stands), quiet} for an open task - and a closed one where `closed` - from origin_hold while
+    it is current, else judged and kept. No rule reads a task's status, so a closed task's judgment is kept like an open one's (a closed
+    task's chat read its hold afresh on every read, ~150 statements each)."""
+    if not tid or not (r := store._one(_SIG, (int(tid),))) or (r['Status'] in ('done', 'dropped') and not closed): return None
     sig = json.dumps([RULES, r['n'], r['m'], r['TrustedThrough'], r['OriginBase'], r['g'], senders.start_held(r)])
     if r['Sig'] == sig:
         try: return json.loads(r['HoldJson'])
         except (TypeError, ValueError): pass
-    h = _hold(store, int(tid), t := store.get_task(int(tid)) or {})
-    got = {'hold': h, 'own': his_own(store, tid) if h else None, 'quiet': _quiet(store, int(tid), t)}
+    # ...its thread read once for all three: judging it writes the task row at most, never a message
+    h = _hold(store, int(tid), t := store.get_task(int(tid)) or {}, msgs := store.list_messages(int(tid)))
+    got = {'hold': h, 'own': his_own(store, tid, msgs) if h else None, 'quiet': _quiet(store, int(tid), t, msgs)}
     # ...kept under what it was judged ON: a write meanwhile (its own lift, another process) leaves it stale, so it is judged again
     store._exec('INSERT OR REPLACE INTO origin_hold (TaskId, Sig, HoldJson) VALUES (?,?,?)', (int(tid), sig, json.dumps(got)))
     return got
@@ -411,10 +414,8 @@ def _judged(store, tid) -> dict | None:
 # agent's next turn as an event, under a page that said "the agent hears nothing more"): every road that hands a task's messages to its agent -
 # its events, its brief, its context file, a coding seed - leaves these out until his Trust, and then hands them once (events.commit)
 def _now_judged(store, tid) -> dict:
-    "_judged, or for a closed task judged afresh - {} for none."
-    if not tid: return {}
-    if (j := _judged(store, tid)) is None: j = {'hold': _hold(store, int(tid), t), 'quiet': _quiet(store, int(tid), t)} if (t := store.get_task(int(tid))) else {}
-    return j or {}
+    "_judged whatever the task's status - {} for none."
+    return (_judged(store, tid, closed=True) or {}) if tid else {}
 def withheld(store, tid) -> set:
     "The messages on the task no agent is handed until he trusts their senders - whatever the task's status (a closed one is judged afresh)."
     j = _now_judged(store, tid)
@@ -427,10 +428,10 @@ def quiet(store, tid) -> set:
 # ...AND A MACHINE'S NOTICE FROM SOMEONE UNTRUSTED ON HIS OWN TASK (red team round 4): it holds nothing - no start waits on it, and there is
 # nobody behind it to Trust (senders.can_hold, walk 17) - but his task runs at his full power (launch_mode), so its words are handed to no
 # agent there either. A task a stranger started runs in the stranger's mode, and hears it as their words; his Trust on the sender hands it on
-def _quiet(store, tid: int, t: dict) -> list:
-    "The untrusted senders' notices on a task that runs at his full power: none where it does not."
-    msgs = store.list_messages(tid)
-    if of_task(store, tid, msgs)[0] != 'stranger' or not his_own(store, tid) or teammate_bound(store, tid): return []
+def _quiet(store, tid: int, t: dict, msgs=None) -> list:
+    "The untrusted senders' notices on a task that runs at his full power: none where it does not. `msgs`: its messages when already read."
+    msgs = store.list_messages(tid) if msgs is None else msgs
+    if of_task(store, tid, msgs)[0] != 'stranger' or not his_own(store, tid, msgs) or teammate_bound(store, tid): return []
     through, memo, seen = int(t.get('TrustedThrough') or 0), _memo(store), {}
     return [m['MessageId'] for m in msgs if m['MessageId'] > through and not _own(m) and (m.get('Channel') or '') not in OURS
             and not senders.can_hold(m) and (r := of_message(store, m, memo, seen)) and r[0] == 'stranger']
@@ -449,8 +450,8 @@ def released(store, was: set) -> list:
     "Of the tasks `was` (held_tasks before a Trust press), the ones no sender holds now - judged afresh, never from the stored hold."
     for tid in was: store._exec('DELETE FROM origin_hold WHERE TaskId=?', (int(tid),))
     return [tid for tid in sorted(was) if not hold(store, tid)]
-def _hold(store, tid: int, t: dict) -> dict | None:
-    msgs = store.list_messages(tid)
+def _hold(store, tid: int, t: dict, msgs=None) -> dict | None:
+    msgs = store.list_messages(tid) if msgs is None else msgs
     if of_task(store, tid, msgs)[0] != 'stranger': return None
     # ...a machine's mail too, where this task's own start was held for its sender (senders.can_hold): the reason and its Trust, never a blank task
     through, memo, seen, held = int(t.get('TrustedThrough') or 0), _memo(store), {}, senders.start_held(t)
@@ -482,9 +483,9 @@ OWNER_SPEAKS = contextvars.ContextVar('tq_owner_speaks', default=False)
 # ...AND THE ONE RULE FOR HIS LINE (the owner's two rulings, reconciled 2026-11-19): on a task HE owns - he made it, or what started it is
 # trusted - his line is never held; a stranger's mail that joined it waits for Trust, and his turn runs as the task's mode is. On a task a
 # STRANGER's mail started, "Trust starts the held agent" (2026-11-11) stands: his line is kept by the box and nothing starts until Trust
-def his_own(store, tid) -> bool:
-    "He made the task, or what started it is trusted - a stranger's mail only joined it."
-    t, msgs = store.get_task(int(tid)) or {}, store.list_messages(int(tid))
+def his_own(store, tid, msgs=None) -> bool:
+    "He made the task, or what started it is trusted - a stranger's mail only joined it. `msgs`: its messages when already read."
+    t, msgs = store.get_task(int(tid)) or {}, store.list_messages(int(tid)) if msgs is None else msgs
     if t.get('OriginBase'): return t['OriginBase'] != 'stranger'                 # ...made by him, or vouched for by his Trust (raise_to)
     if not (b := _base(store, int(tid), t, msgs, memo := _memo(store), {})) or b[0] == 'stranger': return False
     if b != NO_BASE: return True                                                # ...his guide chat, his ask to the assistant, a trusted report
